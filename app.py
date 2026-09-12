@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 텍스트 형태의 컴팩트한 페이지 버튼 스타일
+# 전체 UI 스타일링 및 아까 그 마음에 드셨던 깔끔한 텍스트 링크 스타일 적용
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,28 +25,23 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 숫자들이 텍스트처럼 간격 딱 맞게 나열되도록 버튼 스타일 압축 */
-    div.stButton > button {
-        background: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        font-size: 14px !important;
-        font-weight: normal !important;
-        color: #666666 !important;
-        box-shadow: none !important;
-        min-height: 0px !important;
-        width: 100% !important;
+    /* 아까 그 마음에 드셨던 깔끔한 텍스트 간격 링크 스타일 */
+    .page-option-link {
+        color: #666666;
+        text-decoration: none;
+        font-size: 14px;
+        margin-left: 10px;
+        cursor: pointer;
     }
-    div.stButton > button:hover {
-        color: #8e44ad !important;
-        background: transparent !important;
+    .page-option-link:hover {
+        color: #8e44ad;
         text-decoration: underline;
     }
-    div.stButton > button:active, div.stButton > button:focus {
-        color: #8e44ad !important;
-        background: transparent !important;
-        box-shadow: none !important;
+    .page-option-selected {
+        color: #8e44ad;
+        font-weight: bold;
+        font-size: 14px;
+        margin-left: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -109,6 +104,16 @@ def load_data():
 st.title("📚 와글 와글 독서모임 #북큐")
 st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
 
+# URL 쿼리 파라미터로 페이지 개수 즉시 반영
+query_params = st.query_params
+if "per_page" in query_params:
+    try:
+        val = int(query_params["per_page"])
+        if val in [15, 20, 25, 30]:
+            st.session_state.items_per_page = val
+    except:
+        pass
+
 try:
     items = load_data()
     
@@ -142,29 +147,25 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤 (간격 완벽 복구 & 새 창 없음)
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' (아까 그 맘에 드신 텍스트 나열 간격 + 새 창 없음)
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
         st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
         
     with col_per_page:
-        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+        current_per_page = st.session_state.items_per_page
         
-        # 4등분 균등 배치로 깔끔한 간격 복구
-        opt_cols = st.columns(4)
-        page_options = [15, 20, 25, 30]
+        # target="_self"를 주어 새 창이 절대 안 뜨고 현재 창에서 바로 전환되도록 설정
+        options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 볼 목록 개수:</span>"
+        for opt in [15, 20, 25, 30]:
+            if current_per_page == opt:
+                options_html += f"<span class='page-option-selected'>{opt}</span>"
+            else:
+                options_html += f"<a href='?per_page={opt}' target='_self' class='page-option-link'>{opt}</a>"
+        options_html += "</div>"
         
-        for idx, opt in enumerate(page_options):
-            with opt_cols[idx]:
-                is_selected = (st.session_state.items_per_page == opt)
-                if is_selected:
-                    st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding-top: 2px;'>{opt}</div>", unsafe_allow_html=True)
-                else:
-                    if st.button(str(opt), key=f"per_page_{opt}"):
-                        st.session_state.items_per_page = opt
-                        st.session_state.page_num = 1
-                        st.rerun()
+        st.markdown(options_html, unsafe_allow_html=True)
 
     items_per_page = st.session_state.items_per_page
 
