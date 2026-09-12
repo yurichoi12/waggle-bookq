@@ -134,7 +134,7 @@ try:
     with col_per_page:
         st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         
-        # Streamlit 기본 버튼 스타일을 무력화하여 테두리 없는 텍스트 형태로 나열
+        # 버튼 형태의 개수 선택기
         page_options = [15, 20, 25, 30]
         opt_cols = st.columns(4)
         
@@ -144,9 +144,6 @@ try:
                 if is_selected:
                     st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad; padding-top: 4px;'>{opt}</div>", unsafe_allow_html=True)
                 else:
-                    # 링크처럼 클릭 가능한 미니 버튼
-                    if st.button(str(opt), key=f"per_page_{opt}'):
-                        pass # syntax guard
                     if st.button(str(opt), key=f"per_page_{opt}"):
                         st.session_state.items_per_page = opt
                         st.session_state.page_num = 1
