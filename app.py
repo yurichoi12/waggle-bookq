@@ -6,19 +6,25 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 눈에 띄는 보라색 테두리와 포커스 효과 적용
+# 검색창 배경을 연한 보라색으로 가득 채우고 테두리 설정
 st.markdown("""
     <style>
-    /* 입력창(input) 스타일 - 보라색 계열 */
+    /* 입력창 외부 박스 배경색 변경 */
+    div.stTextInput > div > div {
+        background-color: #f3e5f5 !important;
+        border-radius: 12px !important;
+        border: 2px solid #8e44ad !important;
+    }
+    /* 실제 입력창(input) 스타일 */
     div.stTextInput > div > div > input {
         height: 50px;
         font-size: 18px;
-        border-radius: 10px;
-        border: 2px solid #8e44ad;
+        background-color: transparent !important;
+        color: #2c3e50 !important;
+        border: none !important;
     }
     div.stTextInput > div > div > input:focus {
-        border-color: #9b59b6;
-        box-shadow: 0 0 8px rgba(142, 68, 173, 0.4);
+        box-shadow: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
