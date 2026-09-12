@@ -2,7 +2,6 @@ import json
 import urllib.parse
 import streamlit as st
 import gspread
-from google.oauth2.service_accountCredentials if False else None # syntax safety
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
@@ -104,7 +103,7 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # [1행] 검색창과 새로고침 버튼 나란히 배치 (비율을 안정적으로 고정)
+    # [1행] 검색창과 새로고침 버튼 나란히 배치
     col_search, col_refresh = st.columns([4, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)", label_visibility="collapsed")
@@ -133,7 +132,7 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤을 완벽하게 수평 정렬
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤 수평 정렬
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
@@ -142,7 +141,6 @@ try:
     with col_per_page:
         st.markdown("<div class='per-page-label'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         
-        # 4개의 숫자를 나란히 배치하기 위한 컬럼 구조
         opt_cols = st.columns(4)
         page_options = [15, 20, 25, 30]
         
@@ -152,7 +150,6 @@ try:
                 if is_selected:
                     st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding: 4px 0;'>{opt}</div>", unsafe_allow_html=True)
                 else:
-                    # 빈 테두리/배경 없는 깔끔한 버튼 구현
                     if st.button(str(opt), key=f"per_page_{opt}", use_container_width=True):
                         st.session_state.items_per_page = opt
                         st.session_state.page_num = 1
