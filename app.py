@@ -94,18 +94,27 @@ try:
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
-        st.info(f"🔎 원하시는 검색 결과가 없나요? **[👉 YES24에서 '{search_query}' 검색하기]({yes24_url})**")
+        # HTML <a> 태그를 직접 사용하여 target="_blank" 속성 부여 (카카오톡 인앱 브라우저 제어 우회)
+        st.markdown(
+            f"""
+            <div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; margin-bottom: 15px;">
+                🔎 원하시는 검색 결과가 없나요? 
+                <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #ff4b4b; text-decoration: underline;">
+                    👉 YES24에서 '{search_query}' 검색하기
+                </a>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
     st.write("")
 
     for item in filtered_items:
         with st.container():
-            # 카드 느낌을 살리기 위해 컨테이너 내부를 깔끔하게 구성
             raw_sender = item.get("보낸사람", "익명")
             display_name = clean_name(raw_sender)
             date_str = item.get("작성일시", "")
             
-            # 상단에 작성자와 작성일시를 작고 예쁘게 배치
             st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
             
             content = item.get("내용", "")
@@ -113,10 +122,7 @@ try:
                 parts = content.split("]", 1)
                 title_part = parts[0].strip() + "]"
                 body_part = parts[1].strip()
-                
-                # 책 제목 강조
                 st.markdown(f"### {title_part}")
-                # 본문
                 st.markdown(body_part)
             else:
                 st.markdown(content)
@@ -126,7 +132,11 @@ try:
                 for l in link.split("\n"):
                     l = l.strip()
                     if l:
-                        st.markdown(f"🔗 [서점 링크 이동]({l})")
+                        # 서점 링크도 HTML 태그로 안전하게 새 창 열기 적용
+                        st.markdown(
+                            f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #1f77b4; text-decoration: underline;">서점 링크 이동</a>""",
+                            unsafe_allow_html=True
+                        )
                         
             st.markdown("---")
 
