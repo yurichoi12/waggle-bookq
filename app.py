@@ -115,10 +115,14 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
-
-    if st.button("🔄 새로고침"):
-        st.rerun()
+    # 검색창과 새로고침 버튼을 다시 나란히 배치
+    col_search, col_refresh = st.columns([5, 1])
+    with col_search:
+        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)", label_visibility="collapsed")
+    with col_refresh:
+        st.write("") # 높이 맞춤용
+        if st.button("🔄 새로고침"):
+            st.rerun()
 
     filtered_items = items
     if search_query:
@@ -139,20 +143,20 @@ try:
     if "page_num" not in st.session_state:
         st.session_state.page_num = 1
 
-    # 상단 건수 및 개수 선택 영역 (오직 숫자들만 나열)
-    col_count, col_opts = st.columns([3, 2])
+    # 상단 건수 및 개수 선택 영역 ("한 페이지에 볼 목록 개수" 작은 글씨 포함)
+    col_count, col_opts = st.columns([2, 3])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_opts:
+        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         page_options = [15, 20, 25, 30]
         opt_cols = st.columns(len(page_options))
         
         for idx, opt in enumerate(page_options):
             with opt_cols[idx]:
                 is_selected = (st.session_state.items_per_page == opt)
-                # 선택된 항목은 보라색 강조, 나머지는 회색
                 if is_selected:
-                    st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad; padding-top: 4px;'>{opt}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad;'>{opt}</div>", unsafe_allow_html=True)
                 else:
                     if st.button(f"{opt}", key=f"per_page_{opt}"):
                         st.session_state.items_per_page = opt
