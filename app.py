@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 (검색창, 초슬림 표시개수 박스 및 겹침 방지 스타일)
+# 전체 UI 스타일링 (드롭다운 폭을 아주 좁게 축소 및 겹침 방지 스타일)
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,14 +25,14 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 표시 개수 드롭다운 폭을 콤팩트하게 유지하고 우측 정렬 */
+    /* 드롭다운 선택창 폭을 아주 좁게(약 45px) 줄이고 우측 정렬 */
     div[data-baseweb="select"] {
-        max-width: 80px !important;
+        max-width: 55px !important;
         margin-left: auto;
     }
     div[data-baseweb="select"] > div {
-        min-height: 30px !important;
-        height: 30px !important;
+        min-height: 28px !important;
+        height: 28px !important;
         font-size: 13px !important;
         border-radius: 6px !important;
         padding-left: 4px !important;
@@ -149,13 +149,14 @@ try:
 
     total_count = len(filtered_items)
 
-    col_count, col_select_area = st.columns([3, 2])
+    col_count, col_select_area = st.columns([2, 3])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_select_area:
+        # 안내 텍스트를 줄바꿈 없이 한 줄로 출력하고 우측 정렬
         st.markdown(
             """
-            <div style="text-align: right; max-width: 80px; margin-left: auto; font-size: 0.7rem; color: #666666; line-height: 1.1; margin-bottom: 6px; word-break: keep-all;">
+            <div style="text-align: right; font-size: 0.8rem; color: #555555; margin-bottom: 4px; white-space: nowrap;">
                 한 페이지에 볼 목록 개수
             </div>
             """, 
