@@ -11,13 +11,11 @@ def get_gspread_client():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Secrets 읽기 처리
     if "gcp_service_account" in st.secrets:
         raw = st.secrets["gcp_service_account"]
         if isinstance(raw, str):
             creds_dict = json.loads(raw)
         else:
-            # Streamlit AttrDict 객체인 경우 딕셔너리로 변환
             creds_dict = dict(raw)
             if "private_key" in creds_dict and isinstance(creds_dict["private_key"], str):
                 creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
@@ -33,6 +31,14 @@ def get_gspread_client():
 
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
+
+def clean_name(raw_name):
+    """닉네임에 -, : 등이 포함된 경우 그 앞부분만 깔끔하게 추출"""
+    if not raw_name:
+        return "익명"
+    # '-' 또는 ':' 기준으로 나누고 가장 앞 단어를 가져옴
+    name = raw_name.split("-")[0].split(":")[0].strip()
+    return name if name else "익명"
 
 def load_data():
     client = get_gspread_client()
@@ -73,7 +79,7 @@ try:
         filtered_items = [
             item for item in items
             if query in item.get("작성일시", "").lower()
-            or query in item.get("보낸사람", "").lower()
+            or query in clean_name(item.get("보낸사람", "")).lower()
             or query in item.get("내용", "").lower()
             or query in item.get("링크", "").lower()
         ]
@@ -85,7 +91,9 @@ try:
         with st.container():
             col_a, col_b = st.columns([1, 4])
             with col_a:
-                st.markdown(f"**👤 {item.get('보낸사람', '익명')}**")
+                raw_sender = item.get("보낸사람", "익명")
+                display_name = clean_name(raw_sender)
+                st.markdown(f"**👤 {display_name}**")
                 st.caption(f"📅 {item.get('작성일시', '')}")
             with col_b:
                 content = item.get("내용", "")
