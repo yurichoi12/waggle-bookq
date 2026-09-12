@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 검색창 배경 연한 보라색 및 페이지네이션 버튼 깔끔하게 다듬기 스타일
+# 검색창 배경 연한 보라색, 페이지네이션 및 드롭다운 크기/스타일 조절
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,11 +25,35 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 페이지네이션 버튼들을 작고 타이트하게 붙이기 위한 커스텀 */
+    /* 페이지네이션 버튼 깔끔한 텍스트형 스타일 */
     div.row-widget.stHorizontal {
         gap: 0.3rem !important;
         align-items: center;
         justify-content: center;
+    }
+    div.stButton > button {
+        background-color: transparent !important;
+        border: none !important;
+        color: #000000 !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        padding: 0px 6px !important;
+        box-shadow: none !important;
+    }
+    div.stButton > button:hover {
+        color: #8e44ad !important;
+        background-color: transparent !important;
+    }
+
+    /* 표시 개수 selectbox를 본문 폰트 크기 및 높이에 맞춰 아담하게 조정 */
+    div[data-baseweb="select"] > div {
+        min-height: 32px !important;
+        height: 32px !important;
+        font-size: 14px !important;
+        border-radius: 6px !important;
+    }
+    div[data-baseweb="select"] span {
+        font-size: 14px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -101,11 +125,8 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    col_search, col_per_page = st.columns([3, 1])
-    with col_search:
-        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
-    with col_per_page:
-        items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0)
+    # 검색창은 단독으로 넓게 배치
+    search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
 
     if st.button("🔄 새로고침"):
         st.rerun()
@@ -122,7 +143,13 @@ try:
         ]
 
     total_count = len(filtered_items)
-    st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
+
+    # 메시지 건수와 표시 개수 선택 박스를 한 줄(오른쪽 정렬 형태)에 배치
+    col_count, col_select = st.columns([3, 1])
+    with col_count:
+        st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
+    with col_select:
+        items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0, label_visibility="collapsed")
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
@@ -193,32 +220,8 @@ try:
                             
                 st.markdown("---")
 
-        # 하단 페이지네이션 UI (테두리 박스를 없애고 검정색 텍스트로 밀착 배치)
         if total_pages > 1:
             st.write("")
-            
-            # 페이지 번호들을 HTML/Markdown 링크나 텍스트 버튼처럼 심플하게 구성하기 위해 columns 사용하되 스타일 적용
-            # Streamlit 버튼에 투명/테두리 없음 스타일을 적용하기 위한 CSS 주입
-            st.markdown("""
-                <style>
-                /* Streamlit 기본 버튼을 텍스트 링크처럼 보이게 테두리 제거 및 검정색 지정 */
-                div.stButton > button {
-                    background-color: transparent !important;
-                    border: none !important;
-                    color: #000000 !important;
-                    font-size: 16px !important;
-                    font-weight: 500 !important;
-                    padding: 0px 6px !important;
-                    box-shadow: none !important;
-                }
-                div.stButton > button:hover {
-                    color: #8e44ad !important;
-                    background-color: transparent !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-
-            # 총 버튼 개수만큼 컬럼 생성 (간격을 좁게 만들기)
             max_visible_buttons = min(total_pages + 2, 12)
             cols = st.columns(max_visible_buttons)
             
@@ -230,7 +233,6 @@ try:
             for p in range(1, total_pages + 1):
                 if p < max_visible_buttons - 1:
                     with cols[p]:
-                        # 현재 페이지는 진하게 또는 밑줄 등으로 표시, 나머지는 검정색
                         label = f"**{p}**" if p == current_page else str(p)
                         if st.button(label, key=f"page_num_{p}"):
                             st.session_state.page_num = p
