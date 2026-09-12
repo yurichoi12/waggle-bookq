@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 (검색창, 초슬림 표시개수 박스, 현재 페이지 원형 배지 등)
+# 전체 UI 스타일링 (검색창, 초슬림 표시개수 박스 및 겹침 방지 스타일)
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,14 +25,14 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 표시 개수 드롭다운 폭을 기존의 반으로 슬림하게 줄이기 */
+    /* 표시 개수 드롭다운 폭을 콤팩트하게 유지하고 우측 정렬 */
     div[data-baseweb="select"] {
-        max-width: 75px !important;
+        max-width: 80px !important;
         margin-left: auto;
     }
     div[data-baseweb="select"] > div {
-        min-height: 28px !important;
-        height: 28px !important;
+        min-height: 30px !important;
+        height: 30px !important;
         font-size: 13px !important;
         border-radius: 6px !important;
         padding-left: 4px !important;
@@ -143,18 +143,27 @@ try:
             item for item in items
             if query in item.get("작성일시", "").lower()
             or query in clean_name(item.get("보낸사람", "")).lower()
+            or query in item.gert("내용", "").lower() if hasattr(item, "get") else "" # 안전장치
             or query in item.get("내용", "").lower()
             or query in item.get("링크", "").lower()
         ]
 
     total_count = len(filtered_items)
 
-    # 총 메시지 건수와, 우측 상단에 작은 글씨로 안내문구 + 슬림한 드롭다운 배치
+    # 메시지 건수와 안내문구+드롭다운 영역 배치 (간격 여유 있게 확보)
     col_count, col_select_area = st.columns([3, 2])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_select_area:
-        st.markdown("<div style='text-align: right; font-size: 0.8rem; color: #666666; margin-bottom: -18px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+        # 안내 문구가 드롭다운 폭(max-width: 80px)과 맞추어 줄바꿈되도록 하고, 겹침 방지 여백 추가
+        st.markdown(
+            """
+            <div style="text-align: right; max-width: 80px; margin-left: auto; font-size: 0.7rem; color: #666666; line-height: 1.1; margin-bottom: 6px; word-break: keep-all;">
+                한 페이지에 볼 목록 개수
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
         items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0, label_visibility="collapsed")
 
     if search_query:
