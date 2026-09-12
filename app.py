@@ -6,15 +6,19 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# CSS를 이용해 검색창 두께와 크기 눈에 띄게 키우기
+# 눈에 띄는 보라색 테두리와 포커스 효과 적용
 st.markdown("""
     <style>
-    /* 입력창(input) 스타일 강조 */
+    /* 입력창(input) 스타일 - 보라색 계열 */
     div.stTextInput > div > div > input {
         height: 50px;
         font-size: 18px;
         border-radius: 10px;
-        border: 2px solid #ff4b4b;
+        border: 2px solid #8e44ad;
+    }
+    div.stTextInput > div > div > input:focus {
+        border-color: #9b59b6;
+        box-shadow: 0 0 8px rgba(142, 68, 173, 0.4);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -86,7 +90,6 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # 눈에 잘 띄도록 레이블 추가
     search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
 
     if st.button("🔄 새로고침"):
@@ -110,9 +113,9 @@ try:
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
         st.markdown(
             f"""
-            <div style="padding: 12px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 15px; font-size: 15px;">
+            <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin-bottom: 15px; font-size: 15px; border-left: 4px solid #8e44ad;">
                 🔎 원하시는 검색 결과가 없나요? 
-                <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #ff4b4b; text-decoration: underline;">
+                <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">
                     👉 YES24에서 '{search_query}' 검색하기
                 </a>
             </div>
@@ -146,7 +149,7 @@ try:
                     l = l.strip()
                     if l:
                         st.markdown(
-                            f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #1f77b4; text-decoration: underline;">서점 링크 이동</a>""",
+                            f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
                             unsafe_allow_html=True
                         )
                         
