@@ -6,6 +6,19 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
+# CSS를 이용해 검색창 두께와 크기 눈에 띄게 키우기
+st.markdown("""
+    <style>
+    /* 입력창(input) 스타일 강조 */
+    div.stTextInput > div > div > input {
+        height: 50px;
+        font-size: 18px;
+        border-radius: 10px;
+        border: 2px solid #ff4b4b;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 def get_gspread_client():
     SCOPE = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -73,7 +86,8 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    search_query = st.text_input("🔍 검색어 입력 (책 제목, 작성자, 내용)", placeholder="예: 채채, 묘생묘세, 소설...")
+    # 눈에 잘 띄도록 레이블 추가
+    search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
 
     if st.button("🔄 새로고침"):
         st.rerun()
@@ -94,10 +108,9 @@ try:
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
-        # HTML <a> 태그를 직접 사용하여 target="_blank" 속성 부여 (카카오톡 인앱 브라우저 제어 우회)
         st.markdown(
             f"""
-            <div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; margin-bottom: 15px;">
+            <div style="padding: 12px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 15px; font-size: 15px;">
                 🔎 원하시는 검색 결과가 없나요? 
                 <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #ff4b4b; text-decoration: underline;">
                     👉 YES24에서 '{search_query}' 검색하기
@@ -132,7 +145,6 @@ try:
                 for l in link.split("\n"):
                     l = l.strip()
                     if l:
-                        # 서점 링크도 HTML 태그로 안전하게 새 창 열기 적용
                         st.markdown(
                             f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #1f77b4; text-decoration: underline;">서점 링크 이동</a>""",
                             unsafe_allow_html=True
