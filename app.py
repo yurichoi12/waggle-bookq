@@ -64,7 +64,6 @@ def load_data():
         parsed_data.append(item)
     
     # 작성일시 기준 최신순 정렬 (역순)
-    # 날짜 문자열이 보통 "YYYY-MM-DD HH:MM:SS" 형태이므로 문자열 내림차순 정렬 시 최신순이 됩니다.
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
@@ -94,7 +93,7 @@ try:
             or query in item.get("링크", "").lower()
         ]
 
-    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지가 검색되었습니다.**")
+    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지 가 검색되었습니다.**")
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
@@ -113,7 +112,16 @@ try:
                 st.caption(f"📅 {item.get('작성일시', '')}")
             with col_b:
                 content = item.get("내용", "")
-                st.markdown(content)
+                # 괄호 ']'가 있다면 첫 번째 블록(책 제목 등)을 첫 줄로 분리
+                if "]" in content:
+                    parts = content.split("]", 1)
+                    title_part = parts[0].strip() + "]"
+                    body_part = parts[1].strip()
+                    st.markdown(f"### {title_part}")
+                    st.markdown(body_part)
+                else:
+                    st.markdown(content)
+                    
                 link = item.get("링크", "")
                 if link:
                     for l in link.split("\n"):
