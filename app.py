@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 불필요한 버튼 배경/박스 제거 스타일
+# 전체 UI 스타일링 및 버튼 테두리/여백 제거
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,19 +25,19 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 페이지네이션 및 개수 선택 버튼: 박스 테두리/배경 없애고 아주 작게 밀착 */
+    /* 개수 선택 버튼: 테두리/배경 없이 아주 작게 밀착 */
     div.row-widget.stHorizontal {
-        gap: 0.1rem !important;
+        gap: 0.05rem !important;
         align-items: center;
         justify-content: flex-end;
     }
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
-        color: #666666 !important;
+        color: #888888 !important;
         font-size: 13px !important;
         font-weight: 400 !important;
-        padding: 0px 3px !important;
+        padding: 0px 4px !important;
         min-height: 0px !important;
         box-shadow: none !important;
     }
@@ -139,25 +139,20 @@ try:
     if "page_num" not in st.session_state:
         st.session_state.page_num = 1
 
-    # 상단 건수 및 개수 선택 영역 (간격을 좁게 붙임)
+    # 상단 건수 및 개수 선택 영역 (오직 숫자들만 나열)
     col_count, col_opts = st.columns([3, 2])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_opts:
-        # 가로로 바짝 붙인 아주 작은 선택지들 (15, 20, 25, 30)
-        opt_cols = st.columns(5)
         page_options = [15, 20, 25, 30]
+        opt_cols = st.columns(len(page_options))
         
-        with opt_cols[0]:
-            st.markdown("<div style='font-size: 11px; color: #888; text-align: right; padding-top: 4px;'>표시:</div>", unsafe_allow_html=True)
-            
         for idx, opt in enumerate(page_options):
-            with opt_cols[idx + 1]:
+            with opt_cols[idx]:
                 is_selected = (st.session_state.items_per_page == opt)
-                # 선택된 항목은 보라색 볼드체, 나머지는 회색
+                # 선택된 항목은 보라색 강조, 나머지는 회색
                 if is_selected:
-                    if st.button(f"**{opt}**", key=f"per_page_{opt}"):
-                        pass
+                    st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad; padding-top: 4px;'>{opt}</div>", unsafe_allow_html=True)
                 else:
                     if st.button(f"{opt}", key=f"per_page_{opt}"):
                         st.session_state.items_per_page = opt
