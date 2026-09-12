@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 검색창 배경 연한 보라색 및 UI 스타일링
+# 검색창 배경 연한 보라색 및 페이지네이션 버튼 깔끔하게 다듬기 스타일
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -23,6 +23,13 @@ st.markdown("""
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
+    }
+    
+    /* 페이지네이션 버튼들을 작고 타이트하게 붙이기 위한 커스텀 */
+    div.row-widget.stHorizontal {
+        gap: 0.3rem !important;
+        align-items: center;
+        justify-content: center;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -94,7 +101,6 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # 상단 컨트롤 레이아웃: 검색창과 개수 설정 박스 배치
     col_search, col_per_page = st.columns([3, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
@@ -136,33 +142,27 @@ try:
     st.write("")
 
     if total_count > 0:
-        # 페이지네이션 계산 로직
         import math
         total_pages = math.ceil(total_count / items_per_page)
         
-        # 페이지 상태 유지
         if "page_num" not in st.session_state:
             st.session_state.page_num = 1
         
-        # 검색어가 바뀌면 페이지를 1페이지로 초기화
         if "prev_search" not in st.session_state:
             st.session_state.prev_search = search_query
         if st.session_state.prev_search != search_query:
             st.session_state.page_num = 1
             st.session_state.prev_search = search_query
 
-        # 페이지 범위 보정
         if st.session_state.page_num > total_pages:
             st.session_state.page_num = max(1, total_pages)
 
         current_page = st.session_state.page_num
         
-        # 현재 페이지에 해당하는 아이템 슬라이싱
         start_idx = (current_page - 1) * items_per_page
         end_idx = start_idx + items_per_page
         page_items = filtered_items[start_idx:end_idx]
 
-        # 데이터 카드 출력
         for item in page_items:
             with st.container():
                 raw_sender = item.get("보낸사람", "익명")
@@ -193,29 +193,51 @@ try:
                             
                 st.markdown("---")
 
-        # 하단 페이지네이션 UI
+        # 하단 페이지네이션 UI (테두리 박스를 없애고 검정색 텍스트로 밀착 배치)
         if total_pages > 1:
             st.write("")
-            cols = st.columns(min(total_pages + 2, 10)) # 최대 버튼 수 조절
             
-            # 이전 페이지 버튼
+            # 페이지 번호들을 HTML/Markdown 링크나 텍스트 버튼처럼 심플하게 구성하기 위해 columns 사용하되 스타일 적용
+            # Streamlit 버튼에 투명/테두리 없음 스타일을 적용하기 위한 CSS 주입
+            st.markdown("""
+                <style>
+                /* Streamlit 기본 버튼을 텍스트 링크처럼 보이게 테두리 제거 및 검정색 지정 */
+                div.stButton > button {
+                    background-color: transparent !important;
+                    border: none !important;
+                    color: #000000 !important;
+                    font-size: 16px !important;
+                    font-weight: 500 !important;
+                    padding: 0px 6px !important;
+                    box-shadow: none !important;
+                }
+                div.stButton > button:hover {
+                    color: #8e44ad !important;
+                    background-color: transparent !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+
+            # 총 버튼 개수만큼 컬럼 생성 (간격을 좁게 만들기)
+            max_visible_buttons = min(total_pages + 2, 12)
+            cols = st.columns(max_visible_buttons)
+            
             with cols[0]:
-                if st.button("◀ 이전", disabled=(current_page == 1)):
+                if st.button("<", disabled=(current_page == 1), key="prev_page_btn"):
                     st.session_state.page_num -= 1
                     st.rerun()
             
-            # 페이지 번호 버튼들
             for p in range(1, total_pages + 1):
-                if p < len(cols) - 1:
+                if p < max_visible_buttons - 1:
                     with cols[p]:
-                        btn_label = f"[{p}]" if p == current_page else str(p)
-                        if st.button(btn_label, key=f"page_btn_{p}"):
+                        # 현재 페이지는 진하게 또는 밑줄 등으로 표시, 나머지는 검정색
+                        label = f"**{p}**" if p == current_page else str(p)
+                        if st.button(label, key=f"page_num_{p}"):
                             st.session_state.page_num = p
                             st.rerun()
             
-            # 다음 페이지 버튼
             with cols[-1]:
-                if st.button("다음 ▶", disabled=(current_page == total_pages)):
+                if st.button(">", disabled=(current_page == total_pages), key="next_page_btn"):
                     st.session_state.page_num += 1
                     st.rerun()
 
