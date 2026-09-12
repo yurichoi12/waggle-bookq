@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 아까 그 마음에 드셨던 깔끔한 텍스트 링크 스타일 적용
+# 전체 UI 스타일링 및 마음에 드셨던 깔끔한 텍스트 링크 스타일 적용
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,7 +25,7 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 아까 그 마음에 드셨던 깔끔한 텍스트 간격 링크 스타일 */
+    /* 깔끔한 텍스트 간격 링크 스타일 */
     .page-option-link {
         color: #666666;
         text-decoration: none;
@@ -147,7 +147,7 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' (아까 그 맘에 드신 텍스트 나열 간격 + 새 창 없음)
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' (텍스트 나열 간격 + target=_self로 새 창 방지)
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
@@ -156,7 +156,6 @@ try:
     with col_per_page:
         current_per_page = st.session_state.items_per_page
         
-        # target="_self"를 주어 새 창이 절대 안 뜨고 현재 창에서 바로 전환되도록 설정
         options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 볼 목록 개수:</span>"
         for opt in [15, 20, 25, 30]:
             if current_per_page == opt:
