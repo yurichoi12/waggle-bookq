@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 (검색창, 표시개수 박스 여백, 현재 페이지 버튼 강조 CSS)
+# 전체 UI 스타일링 (검색창, 초슬림 표시개수 박스, 현재 페이지 원형 배지 등)
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,19 +25,21 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 표시 개수 드롭다운 크기를 내용에 맞게 콤팩트하게 줄이기 */
+    /* 표시 개수 드롭다운 폭을 기존의 반으로 슬림하게 줄이기 */
     div[data-baseweb="select"] {
-        max-width: 110px;
+        max-width: 75px !important;
         margin-left: auto;
     }
     div[data-baseweb="select"] > div {
-        min-height: 32px !important;
-        height: 32px !important;
-        font-size: 14px !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        font-size: 13px !important;
         border-radius: 6px !important;
+        padding-left: 4px !important;
+        padding-right: 2px !important;
     }
     div[data-baseweb="select"] span {
-        font-size: 14px !important;
+        font-size: 13px !important;
     }
     
     /* 페이지네이션 버튼 기본 스타일 */
@@ -59,9 +61,6 @@ st.markdown("""
         color: #8e44ad !important;
         background-color: transparent !important;
     }
-
-    /* 현재 페이지 번호 버튼만 뒤에 연한 회색 동그라미(배경)가 들어가도록 지정 */
-    /* Streamlit이 생성하는 고유 key 이름을 활용하거나 특정 패턴 타겟팅 */
     </style>
 """, unsafe_allow_html=True)
 
@@ -150,10 +149,12 @@ try:
 
     total_count = len(filtered_items)
 
-    col_count, col_select = st.columns([4, 1])
+    # 총 메시지 건수와, 우측 상단에 작은 글씨로 안내문구 + 슬림한 드롭다운 배치
+    col_count, col_select_area = st.columns([3, 2])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
-    with col_select:
+    with col_select_area:
+        st.markdown("<div style='text-align: right; font-size: 0.8rem; color: #666666; margin-bottom: -18px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0, label_visibility="collapsed")
 
     if search_query:
@@ -227,19 +228,6 @@ try:
 
         if total_pages > 1:
             st.write("")
-            
-            # 동적으로 현재 페이지 버튼에만 회색 동그라미 스타일을 입히기 위한 세련된 HTML 컨테이너 렌더링 방식 적용
-            # Streamlit 버튼 대신 깔끔한 HTML 기반 인라인 링크 페이지네이션 구성
-            pagination_html = "<div style='text-align: center; margin-top: 15px; font-size: 16px;'>"
-            
-            # 이전 버튼 (<)
-            if current_page > 1:
-                # 쿼리 파라미터나 상태 제어를 위해 여기서는 Streamlit 네이티브 버튼 유지하되 깔끔하게 처리
-                pass
-
-            # 기존 st.button 방식을 유지하되, 현재 페이지 버튼만 CSS로 구별할 수 있도록 고유 클래스나 속성 부여 대신 순수 마크다운 페이지네이션으로 전환하면 완벽합니다!
-            # Streamlit에서 버튼 클릭을 처리하기 위해 아래와 같이 구성합니다.
-            
             max_visible_buttons = min(total_pages + 2, 12)
             cols = st.columns(max_visible_buttons)
             
@@ -251,9 +239,7 @@ try:
             for p in range(1, total_pages + 1):
                 if p < max_visible_buttons - 1:
                     with cols[p]:
-                        # 현재 페이지일 때 버튼 대신 스타일이 들어간 텍스트나 특별 처리된 버튼 노출
                         if p == current_page:
-                            # 현재 페이지 표시는 회색 동그라미 배지로 깔끔하게 감싸기 (클릭 불필요하므로 텍스트 배지로 출력)
                             st.markdown(f"<div style='display: inline-block; background-color: #e2e8f0; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; font-weight: bold; color: #000000; margin: 0 auto;'>{p}</div>", unsafe_allow_html=True)
                         else:
                             if st.button(str(p), key=f"page_num_{p}"):
