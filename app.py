@@ -33,11 +33,17 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 def clean_name(raw_name):
-    """닉네임에 -, : 등이 포함된 경우 그 앞부분만 깔끔하게 추출"""
+    """-, :, _, 그리고 공백(띄어쓰기)을 기준으로 앞의 글자만 깔끔하게 추출"""
     if not raw_name:
         return "익명"
-    # '-' 또는 ':' 기준으로 나누고 가장 앞 단어를 가져옴
-    name = raw_name.split("-")[0].split(":")[0].strip()
+    
+    name = raw_name.strip()
+    # 순서대로 -, :, _, 공백 기준으로 분할하여 가장 앞 단어만 취함
+    for delimiter in ["-", ":", "_", " "]:
+        if delimiter in name:
+            name = name.split(delimiter)[0]
+            
+    name = name.strip()
     return name if name else "익명"
 
 def load_data():
