@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 테두리 없는 깔끔한 텍스트형 페이지 옵션 스타일
+# 전체 UI 스타일링 및 텍스트 형태의 컴팩트한 페이지 버튼 스타일
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,7 +25,7 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* Streamlit 버튼을 완전한 일반 텍스트 링크처럼 보이게 커스텀 */
+    /* 숫자들이 텍스트처럼 간격 딱 맞게 나열되도록 버튼 스타일 압축 */
     div.stButton > button {
         background: transparent !important;
         border: none !important;
@@ -36,6 +36,7 @@ st.markdown("""
         color: #666666 !important;
         box-shadow: none !important;
         min-height: 0px !important;
+        width: 100% !important;
     }
     div.stButton > button:hover {
         color: #8e44ad !important;
@@ -141,34 +142,25 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤 (새 창 없이 현재 페이지에서 즉시 전환)
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤 (간격 완벽 복구 & 새 창 없음)
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
         st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
         
     with col_per_page:
-        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: -4px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         
-        # 15, 20, 25, 30을 새 창 없이 깔끔하게 수평 배치하기 위한 미니 컬럼들
-        opt_cols = st.columns([1, 1, 1, 1, 0.2]) # 우측 정렬 느낌을 위한 비율
-        # 실제 배치는 우측에 몰아주기 위해 빈 공간 활용
-        
+        # 4등분 균등 배치로 깔끔한 간격 복구
+        opt_cols = st.columns(4)
         page_options = [15, 20, 25, 30]
         
-        # 우측 정렬 컨테이너 구조로 렌더링
-        opt_layout_cols = st.columns([1.5, 1, 1, 1, 1]) # [여백, 15, 20, 25, 30]
-        with opt_layout_cols[0]:
-            st.write("") # 빈 공간
-            
         for idx, opt in enumerate(page_options):
-            with opt_layout_cols[idx + 1]:
+            with opt_cols[idx]:
                 is_selected = (st.session_state.items_per_page == opt)
                 if is_selected:
-                    # 선택된 숫자는 보라색 볼드체 텍스트로 표시 (클릭 불필요)
-                    st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding-top: 4px;'>{opt}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding-top: 2px;'>{opt}</div>", unsafe_allow_html=True)
                 else:
-                    # 선택되지 않은 숫자는 클릭 시 새 창 없이 바로 상태 변경 후 리프레시
                     if st.button(str(opt), key=f"per_page_{opt}"):
                         st.session_state.items_per_page = opt
                         st.session_state.page_num = 1
