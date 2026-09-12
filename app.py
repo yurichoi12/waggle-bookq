@@ -144,7 +144,8 @@ try:
                 parts = content.split("]", 1)
                 title_part = parts[0].strip() + "]"
                 body_part = parts[1].strip()
-                st.markdown(f"### {title_part}")
+                # 책 제목 글씨 크기를 굵고 적당하게 (h4 크기 혹은 커스텀 스타일 적용)
+                st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
                 st.markdown(body_part)
             else:
                 st.markdown(content)
