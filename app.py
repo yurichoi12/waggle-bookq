@@ -6,16 +6,14 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 검색창 배경을 연한 보라색으로 가득 채우고 테두리 설정
+# 검색창 배경 연한 보라색 및 UI 스타일링
 st.markdown("""
     <style>
-    /* 입력창 외부 박스 배경색 변경 */
     div.stTextInput > div > div {
         background-color: #f3e5f5 !important;
         border-radius: 12px !important;
         border: 2px solid #8e44ad !important;
     }
-    /* 실제 입력창(input) 스타일 */
     div.stTextInput > div > div > input {
         height: 50px;
         font-size: 18px;
@@ -96,7 +94,12 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
+    # 상단 컨트롤 레이아웃: 검색창과 개수 설정 박스 배치
+    col_search, col_per_page = st.columns([3, 1])
+    with col_search:
+        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
+    with col_per_page:
+        items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0)
 
     if st.button("🔄 새로고침"):
         st.rerun()
@@ -112,7 +115,8 @@ try:
             or query in item.get("링크", "").lower()
         ]
 
-    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지**")
+    total_count = len(filtered_items)
+    st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
@@ -131,36 +135,89 @@ try:
 
     st.write("")
 
-    for item in filtered_items:
-        with st.container():
-            raw_sender = item.get("보낸사람", "익명")
-            display_name = clean_name(raw_sender)
-            date_str = item.get("작성일시", "")
-            
-            st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
-            
-            content = item.get("내용", "")
-            if "]" in content:
-                parts = content.split("]", 1)
-                title_part = parts[0].strip() + "]"
-                body_part = parts[1].strip()
-                # 책 제목 글씨 크기를 굵고 적당하게 (h4 크기 혹은 커스텀 스타일 적용)
-                st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
-                st.markdown(body_part)
-            else:
-                st.markdown(content)
+    if total_count > 0:
+        # 페이지네이션 계산 로직
+        import math
+        total_pages = math.ceil(total_count / items_per_page)
+        
+        # 페이지 상태 유지
+        if "page_num" not in st.session_state:
+            st.session_state.page_num = 1
+        
+        # 검색어가 바뀌면 페이지를 1페이지로 초기화
+        if "prev_search" not in st.session_state:
+            st.session_state.prev_search = search_query
+        if st.session_state.prev_search != search_query:
+            st.session_state.page_num = 1
+            st.session_state.prev_search = search_query
+
+        # 페이지 범위 보정
+        if st.session_state.page_num > total_pages:
+            st.session_state.page_num = max(1, total_pages)
+
+        current_page = st.session_state.page_num
+        
+        # 현재 페이지에 해당하는 아이템 슬라이싱
+        start_idx = (current_page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        page_items = filtered_items[start_idx:end_idx]
+
+        # 데이터 카드 출력
+        for item in page_items:
+            with st.container():
+                raw_sender = item.get("보낸사람", "익명")
+                display_name = clean_name(raw_sender)
+                date_str = item.get("작성일시", "")
                 
-            link = item.get("링크", "")
-            if link:
-                for l in link.split("\n"):
-                    l = l.strip()
-                    if l:
-                        st.markdown(
-                            f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
-                            unsafe_allow_html=True
-                        )
-                        
-            st.markdown("---")
+                st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
+                
+                content = item.get("내용", "")
+                if "]" in content:
+                    parts = content.split("]", 1)
+                    title_part = parts[0].strip() + "]"
+                    body_part = parts[1].strip()
+                    st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
+                    st.markdown(body_part)
+                else:
+                    st.markdown(content)
+                    
+                link = item.get("링크", "")
+                if link:
+                    for l in link.split("\n"):
+                        l = l.strip()
+                        if l:
+                            st.markdown(
+                                f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
+                                unsafe_allow_html=True
+                            )
+                            
+                st.markdown("---")
+
+        # 하단 페이지네이션 UI
+        if total_pages > 1:
+            st.write("")
+            cols = st.columns(min(total_pages + 2, 10)) # 최대 버튼 수 조절
+            
+            # 이전 페이지 버튼
+            with cols[0]:
+                if st.button("◀ 이전", disabled=(current_page == 1)):
+                    st.session_state.page_num -= 1
+                    st.rerun()
+            
+            # 페이지 번호 버튼들
+            for p in range(1, total_pages + 1):
+                if p < len(cols) - 1:
+                    with cols[p]:
+                        btn_label = f"[{p}]" if p == current_page else str(p)
+                        if st.button(btn_label, key=f"page_btn_{p}"):
+                            st.session_state.page_num = p
+                            st.rerun()
+            
+            # 다음 페이지 버튼
+            with cols[-1]:
+                if st.button("다음 ▶", disabled=(current_page == total_pages)):
+                    st.session_state.page_num += 1
+                    st.rerun()
 
 except Exception as e:
     st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
