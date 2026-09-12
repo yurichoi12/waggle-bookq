@@ -86,13 +86,12 @@ try:
             item for item in items
             if query in item.get("작성일시", "").lower()
             or query in clean_name(item.get("보낸사람", "")).lower()
-            or query in item.2.get("내용", "").lower() if hasattr(item, 'get') else query in item.get("내용", "").lower()
+            or query in item.get("내용", "").lower()
             or query in item.get("링크", "").lower()
         ]
 
     st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지가 검색되었습니다.**")
 
-    # 검색 결과가 없거나, 검색어가 입력된 경우 YES24 바로가기 링크 제공
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
