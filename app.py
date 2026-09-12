@@ -2,11 +2,12 @@ import json
 import urllib.parse
 import streamlit as st
 import gspread
+from google.oauth2.service_accountCredentials if False else None # syntax safety
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 버튼 테두리/여백 제거
+# 전체 UI 스타일링 및 불필요한 마진/패딩 압축
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,26 +26,19 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 개수 선택 버튼: 테두리/배경 없이 아주 작게 밀착 */
-    div.row-widget.stHorizontal {
-        gap: 0.05rem !important;
-        align-items: center;
-        justify-content: flex-end;
+    /* 버튼 형태의 페이지 개수 선택기 스타일 */
+    .per-page-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        width: 100%;
     }
-    div.stButton > button {
-        background-color: transparent !important;
-        border: none !important;
-        color: #888888 !important;
-        font-size: 13px !important;
-        font-weight: 400 !important;
-        padding: 0px 4px !important;
-        min-height: 0px !important;
-        box-shadow: none !important;
-    }
-    div.stButton > button:hover {
-        color: #8e44ad !important;
-        background-color: transparent !important;
-        font-weight: bold !important;
+    .per-page-label {
+        font-size: 11px;
+        color: #888888;
+        margin-bottom: 4px;
+        text-align: right;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -77,17 +71,13 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 def clean_name(raw_name):
-    """-, :, _, 그리고 공백(띄어쓰기)을 기준으로 앞의 글자만 깔끔하게 추출"""
     if not raw_name:
         return "익명"
-    
     name = raw_name.strip()
     for delimiter in ["-", ":", "_", " "]:
         if delimiter in name:
             name = name.split(delimiter)[0]
-            
-    name = name.strip()
-    return name if name else "익명"
+    return name.strip() if name.strip() else "익명"
 
 def load_data():
     client = get_gspread_client()
@@ -105,7 +95,6 @@ def load_data():
         for i, h in enumerate(headers):
             item[h] = row[i] if i < len(row) else ""
         parsed_data.append(item)
-    
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
@@ -115,13 +104,12 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # 검색창과 새로고침 버튼을 다시 나란히 배치
-    col_search, col_refresh = st.columns([5, 1])
+    # [1행] 검색창과 새로고침 버튼 나란히 배치 (비율을 안정적으로 고정)
+    col_search, col_refresh = st.columns([4, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)", label_visibility="collapsed")
     with col_refresh:
-        st.write("") # 높이 맞춤용
-        if st.button("🔄 새로고침"):
+        if st.button("🔄 새로고침", use_container_width=True):
             st.rerun()
 
     filtered_items = items
@@ -143,22 +131,29 @@ try:
     if "page_num" not in st.session_state:
         st.session_state.page_num = 1
 
-    # 상단 건수 및 개수 선택 영역 ("한 페이지에 볼 목록 개수" 작은 글씨 포함)
-    col_count, col_opts = st.columns([2, 3])
-    with col_count:
-        st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
-    with col_opts:
-        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+    st.write("")
+
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' 컨트롤을 완벽하게 수평 정렬
+    col_count_text, col_per_page = st.columns([2, 3])
+    
+    with col_count_text:
+        st.markdown(f"<div style='padding-top: 10px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
+        
+    with col_per_page:
+        st.markdown("<div class='per-page-label'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+        
+        # 4개의 숫자를 나란히 배치하기 위한 컬럼 구조
+        opt_cols = st.columns(4)
         page_options = [15, 20, 25, 30]
-        opt_cols = st.columns(len(page_options))
         
         for idx, opt in enumerate(page_options):
             with opt_cols[idx]:
                 is_selected = (st.session_state.items_per_page == opt)
                 if is_selected:
-                    st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad;'>{opt}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding: 4px 0;'>{opt}</div>", unsafe_allow_html=True)
                 else:
-                    if st.button(f"{opt}", key=f"per_page_{opt}"):
+                    # 빈 테두리/배경 없는 깔끔한 버튼 구현
+                    if st.button(str(opt), key=f"per_page_{opt}", use_container_width=True):
                         st.session_state.items_per_page = opt
                         st.session_state.page_num = 1
                         st.rerun()
@@ -170,7 +165,7 @@ try:
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
         st.markdown(
             f"""
-            <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin-bottom: 15px; font-size: 15px; border-left: 4px solid #8e44ad;">
+            <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin: 15px 0; font-size: 15px; border-left: 4px solid #8e44ad;">
                 🔎 원하시는 검색 결과가 없나요? 
                 <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">
                     👉 YES24에서 '{search_query}' 검색하기
