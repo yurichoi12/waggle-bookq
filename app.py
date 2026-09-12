@@ -93,7 +93,7 @@ try:
             or query in item.get("링크", "").lower()
         ]
 
-    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지 가 검색되었습니다.**")
+    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지가 검색되었습니다.**")
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
@@ -104,30 +104,51 @@ try:
 
     for item in filtered_items:
         with st.container():
-            col_a, col_b = st.columns([1, 4])
-            with col_a:
+            # 작성자 정보 / (구분선) / 책 제목 / 본문 구조로 열 배치
+            # 비율: 작성자(1.2), 구분선(0.1), 책 제목(2), 본문(4.5)
+            c_author, c_line1, c_title, c_line2, c_content = st.columns([1.2, 0.1, 2, 0.1, 4.5])
+            
+            with c_author:
                 raw_sender = item.get("보낸사람", "익명")
                 display_name = clean_name(raw_sender)
                 st.markdown(f"**👤 {display_name}**")
                 st.caption(f"📅 {item.get('작성일시', '')}")
-            with col_b:
+                
+            with c_line1:
+                st.markdown("---") # 세로 느낌의 구분용
+                
+            with c_title:
                 content = item.get("내용", "")
-                # 괄호 ']'가 있다면 첫 번째 블록(책 제목 등)을 첫 줄로 분리
                 if "]" in content:
                     parts = content.split("]", 1)
                     title_part = parts[0].strip() + "]"
                     body_part = parts[1].strip()
-                    st.markdown(f"### {title_part}")
-                    st.markdown(body_part)
                 else:
-                    st.markdown(content)
+                    title_part = "📚 추천 도서"
+                    body_part = content
+                
+                # 적당한 크기의 제목 표시
+                st.markdown(f"**{title_part}**")
+                
+            with c_line2:
+                st.markdown("---")
+                
+            with c_content:
+                if "]" in content:
+                    parts = content.split("]", 1)
+                    body_part = parts[1].strip()
+                else:
+                    body_part = content
                     
+                st.markdown(body_part)
+                
                 link = item.get("링크", "")
                 if link:
                     for l in link.split("\n"):
                         l = l.strip()
                         if l:
                             st.markdown(f"🔗 [서점 링크 이동]({l})")
+                            
             st.divider()
 
 except Exception as e:
