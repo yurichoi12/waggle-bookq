@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링
+# 전체 UI 스타일링 및 불필요한 버튼 배경/박스 제거 스타일
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -23,6 +23,28 @@ st.markdown("""
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
+    }
+    
+    /* 페이지네이션 및 개수 선택 버튼: 박스 테두리/배경 없애고 아주 작게 밀착 */
+    div.row-widget.stHorizontal {
+        gap: 0.1rem !important;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    div.stButton > button {
+        background-color: transparent !important;
+        border: none !important;
+        color: #666666 !important;
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        padding: 0px 3px !important;
+        min-height: 0px !important;
+        box-shadow: none !important;
+    }
+    div.stButton > button:hover {
+        color: #8e44ad !important;
+        background-color: transparent !important;
+        font-weight: bold !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -111,28 +133,36 @@ try:
 
     total_count = len(filtered_items)
 
-    # 세션 상태 초기화 (표시 개수 및 페이지 번호)
+    # 세션 상태 초기화
     if "items_per_page" not in st.session_state:
         st.session_state.items_per_page = 15
     if "page_num" not in st.session_state:
         st.session_state.page_num = 1
 
-    # 상단 개수 표시 및 버튼형 선택 영역 (드롭다운 완전 대체)
-    col_count, col_btns = st.columns([2, 3])
+    # 상단 건수 및 개수 선택 영역 (간격을 좁게 붙임)
+    col_count, col_opts = st.columns([3, 2])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
-    with col_btns:
-        st.markdown("<div style='text-align: right; font-size: 0.75rem; color: #555555; margin-bottom: 3px;'>페이지당 표시 개수</div>", unsafe_allow_html=True)
-        b_cols = st.columns(4)
+    with col_opts:
+        # 가로로 바짝 붙인 아주 작은 선택지들 (15, 20, 25, 30)
+        opt_cols = st.columns(5)
         page_options = [15, 20, 25, 30]
+        
+        with opt_cols[0]:
+            st.markdown("<div style='font-size: 11px; color: #888; text-align: right; padding-top: 4px;'>표시:</div>", unsafe_allow_html=True)
+            
         for idx, opt in enumerate(page_options):
-            with b_cols[idx]:
+            with opt_cols[idx + 1]:
                 is_selected = (st.session_state.items_per_page == opt)
-                btn_label = f"[{opt}]" if is_selected else f"{opt}"
-                if st.button(btn_label, key=f"per_page_{opt}"):
-                    st.session_state.items_per_page = opt
-                    st.session_state.page_num = 1  # 개수가 바뀌면 1페이지로 리셋
-                    st.rerun()
+                # 선택된 항목은 보라색 볼드체, 나머지는 회색
+                if is_selected:
+                    if st.button(f"**{opt}**", key=f"per_page_{opt}"):
+                        pass
+                else:
+                    if st.button(f"{opt}", key=f"per_page_{opt}"):
+                        st.session_state.items_per_page = opt
+                        st.session_state.page_num = 1
+                        st.rerun()
 
     items_per_page = st.session_state.items_per_page
 
@@ -224,7 +254,6 @@ try:
             
             with cols[-1]:
                 if st.button(">", disabled=(current_page == total_pages), key="next_page_btn"):
-                    st.session_state.page_num -= 1  # 수정: 다음 페이지 기능
                     st.session_state.page_num = current_page + 1
                     st.rerun()
 
