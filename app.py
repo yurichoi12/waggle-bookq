@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 불필요한 마진/패딩 압축
+# 전체 UI 스타일링 및 페이지 개수 선택기 버튼 테두리/여백 완전 제거 스타일
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,19 +25,11 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 버튼 형태의 페이지 개수 선택기 스타일 */
-    .per-page-container {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        justify-content: center;
-        width: 100%;
-    }
-    .per-page-label {
-        font-size: 11px;
-        color: #888888;
-        margin-bottom: 4px;
-        text-align: right;
+    /* 개수 선택 버튼: 테두리/배경 완전히 없애고 글자만 촘촘하게 배치 */
+    div.row-widget.stHorizontal {
+        gap: 0px !important;
+        align-items: center;
+        justify-content: flex-end;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -103,12 +95,13 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # [1행] 검색창과 새로고침 버튼 나란히 배치
-    col_search, col_refresh = st.columns([4, 1])
+    # [1행] 검색창과 새로고침 버튼 (새로고침 버튼 크기를 줄이기 위해 비율 조정 [5, 1])
+    col_search, col_refresh = st.columns([5, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)", label_visibility="collapsed")
     with col_refresh:
-        if st.button("🔄 새로고침", use_container_width=True):
+        st.write("") # 미세 높이 맞춤
+        if st.button("🔄 새로고침"):
             st.rerun()
 
     filtered_items = items
@@ -136,21 +129,25 @@ try:
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
-        st.markdown(f"<div style='padding-top: 10px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
         
     with col_per_page:
-        st.markdown("<div class='per-page-label'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: right; font-size: 11px; color: #888888; margin-bottom: 2px;'>한 페이지에 볼 목록 개수</div>", unsafe_allow_html=True)
         
-        opt_cols = st.columns(4)
+        # Streamlit 기본 버튼 스타일을 무력화하여 테두리 없는 텍스트 형태로 나열
         page_options = [15, 20, 25, 30]
+        opt_cols = st.columns(4)
         
         for idx, opt in enumerate(page_options):
             with opt_cols[idx]:
                 is_selected = (st.session_state.items_per_page == opt)
                 if is_selected:
-                    st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: bold; color: #8e44ad; padding: 4px 0;'>{opt}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; font-size: 13px; font-weight: bold; color: #8e44ad; padding-top: 4px;'>{opt}</div>", unsafe_allow_html=True)
                 else:
-                    if st.button(str(opt), key=f"per_page_{opt}", use_container_width=True):
+                    # 링크처럼 클릭 가능한 미니 버튼
+                    if st.button(str(opt), key=f"per_page_{opt}'):
+                        pass # syntax guard
+                    if st.button(str(opt), key=f"per_page_{opt}"):
                         st.session_state.items_per_page = opt
                         st.session_state.page_num = 1
                         st.rerun()
