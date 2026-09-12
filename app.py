@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 (Streamlit selectbox 크기 강제 축소용 CSS)
+# 전체 UI 스타일링
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -23,44 +23,6 @@ st.markdown("""
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
-    }
-    
-    /* 드롭다운 전체 폭을 아주 좁게 강제 고정 */
-    div[data-baseweb="select"] {
-        width: 65px !important;
-        max-width: 65px !important;
-        min-width: 65px !important;
-        margin-left: auto !important;
-    }
-    div[data-baseweb="select"] > div {
-        min-height: 26px !important;
-        height: 26px !important;
-        font-size: 12px !important;
-        border-radius: 4px !important;
-        padding: 0px 2px !important;
-    }
-    div[data-baseweb="select"] span {
-        font-size: 12px !important;
-    }
-    
-    /* 페이지네이션 버튼 기본 스타일 */
-    div.row-widget.stHorizontal {
-        gap: 0.2rem !important;
-        align-items: center;
-        justify-content: center;
-    }
-    div.stButton > button {
-        background-color: transparent !important;
-        border: none !important;
-        color: #000000 !important;
-        font-size: 16px !important;
-        font-weight: 500 !important;
-        padding: 0px 8px !important;
-        box-shadow: none !important;
-    }
-    div.stButton > button:hover {
-        color: #8e44ad !important;
-        background-color: transparent !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -122,7 +84,6 @@ def load_data():
             item[h] = row[i] if i < len(row) else ""
         parsed_data.append(item)
     
-    # 작성일시 기준 최신순 정렬 (역순)
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
@@ -150,19 +111,30 @@ try:
 
     total_count = len(filtered_items)
 
-    col_count, col_select_area = st.columns([2, 3])
+    # 세션 상태 초기화 (표시 개수 및 페이지 번호)
+    if "items_per_page" not in st.session_state:
+        st.session_state.items_per_page = 15
+    if "page_num" not in st.session_state:
+        st.session_state.page_num = 1
+
+    # 상단 개수 표시 및 버튼형 선택 영역 (드롭다운 완전 대체)
+    col_count, col_btns = st.columns([2, 3])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
-    with col_select_area:
-        st.markdown(
-            """
-            <div style="text-align: right; font-size: 0.75rem; color: #555555; margin-bottom: 3px; white-space: nowrap;">
-                한 페이지에 볼 목록 개수
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        items_per_page = st.selectbox("표시 개수", [15, 20, 25, 30], index=0, label_visibility="collapsed")
+    with col_btns:
+        st.markdown("<div style='text-align: right; font-size: 0.75rem; color: #555555; margin-bottom: 3px;'>페이지당 표시 개수</div>", unsafe_allow_html=True)
+        b_cols = st.columns(4)
+        page_options = [15, 20, 25, 30]
+        for idx, opt in enumerate(page_options):
+            with b_cols[idx]:
+                is_selected = (st.session_state.items_per_page == opt)
+                btn_label = f"[{opt}]" if is_selected else f"{opt}"
+                if st.button(btn_label, key=f"per_page_{opt}"):
+                    st.session_state.items_per_page = opt
+                    st.session_state.page_num = 1  # 개수가 바뀌면 1페이지로 리셋
+                    st.rerun()
+
+    items_per_page = st.session_state.items_per_page
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
@@ -184,9 +156,6 @@ try:
     if total_count > 0:
         import math
         total_pages = math.ceil(total_count / items_per_page)
-        
-        if "page_num" not in st.session_state:
-            st.session_state.page_num = 1
         
         if "prev_search" not in st.session_state:
             st.session_state.prev_search = search_query
@@ -255,7 +224,8 @@ try:
             
             with cols[-1]:
                 if st.button(">", disabled=(current_page == total_pages), key="next_page_btn"):
-                    st.session_state.page_num += 1
+                    st.session_state.page_num -= 1  # 수정: 다음 페이지 기능
+                    st.session_state.page_num = current_page + 1
                     st.rerun()
 
 except Exception as e:
