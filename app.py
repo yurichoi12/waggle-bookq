@@ -143,19 +143,16 @@ try:
             item for item in items
             if query in item.get("작성일시", "").lower()
             or query in clean_name(item.get("보낸사람", "")).lower()
-            or query in item.gert("내용", "").lower() if hasattr(item, "get") else "" # 안전장치
             or query in item.get("내용", "").lower()
             or query in item.get("링크", "").lower()
         ]
 
     total_count = len(filtered_items)
 
-    # 메시지 건수와 안내문구+드롭다운 영역 배치 (간격 여유 있게 확보)
     col_count, col_select_area = st.columns([3, 2])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_select_area:
-        # 안내 문구가 드롭다운 폭(max-width: 80px)과 맞추어 줄바꿈되도록 하고, 겹침 방지 여백 추가
         st.markdown(
             """
             <div style="text-align: right; max-width: 80px; margin-left: auto; font-size: 0.7rem; color: #666666; line-height: 1.1; margin-bottom: 6px; word-break: keep-all;">
