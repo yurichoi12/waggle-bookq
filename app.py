@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 검색창 배경 연한 보라색, 페이지네이션 및 드롭다운 크기/스타일 조절
+# 전체 UI 스타일링 (검색창, 표시개수 박스 여백 조절, 현재 페이지 동그라미 강조)
 st.markdown("""
     <style>
     div.stTextInput > div > div {
@@ -25,9 +25,24 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* 페이지네이션 버튼 깔끔한 텍스트형 스타일 */
+    /* 표시 개수 드롭다운 크기를 내용에 맞게 콤팩트하게 줄이기 */
+    div[data-baseweb="select"] {
+        max-width: 110px;
+        margin-left: auto;
+    }
+    div[data-baseweb="select"] > div {
+        min-height: 32px !important;
+        height: 32px !important;
+        font-size: 14px !important;
+        border-radius: 6px !important;
+    }
+    div[data-baseweb="select"] span {
+        font-size: 14px !important;
+    }
+    
+    /* 페이지네이션 버튼 기본 스타일 */
     div.row-widget.stHorizontal {
-        gap: 0.3rem !important;
+        gap: 0.2rem !important;
         align-items: center;
         justify-content: center;
     }
@@ -37,23 +52,12 @@ st.markdown("""
         color: #000000 !important;
         font-size: 16px !important;
         font-weight: 500 !important;
-        padding: 0px 6px !important;
+        padding: 0px 8px !important;
         box-shadow: none !important;
     }
     div.stButton > button:hover {
         color: #8e44ad !important;
         background-color: transparent !important;
-    }
-
-    /* 표시 개수 selectbox를 본문 폰트 크기 및 높이에 맞춰 아담하게 조정 */
-    div[data-baseweb="select"] > div {
-        min-height: 32px !important;
-        height: 32px !important;
-        font-size: 14px !important;
-        border-radius: 6px !important;
-    }
-    div[data-baseweb="select"] span {
-        font-size: 14px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -125,7 +129,6 @@ st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아
 try:
     items = load_data()
     
-    # 검색창은 단독으로 넓게 배치
     search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)")
 
     if st.button("🔄 새로고침"):
@@ -144,8 +147,8 @@ try:
 
     total_count = len(filtered_items)
 
-    # 메시지 건수와 표시 개수 선택 박스를 한 줄(오른쪽 정렬 형태)에 배치
-    col_count, col_select = st.columns([3, 1])
+    # 메시지 건수와 콤팩트한 표시 개수 선택 박스 배치 비율 조정 (우측 밀착)
+    col_count, col_select = st.columns([4, 1])
     with col_count:
         st.markdown(f"**총 {total_count}건의 #북큐 메시지**")
     with col_select:
@@ -233,7 +236,12 @@ try:
             for p in range(1, total_pages + 1):
                 if p < max_visible_buttons - 1:
                     with cols[p]:
-                        label = f"**{p}**" if p == current_page else str(p)
+                        # 현재 페이지인 경우 회색 동그라미 배경 스타일 적용, 나머지는 일반 숫자
+                        if p == current_page:
+                            label = f"<span style='background-color: #e0e0e0; padding: 2px 8px; border-radius: 50%; color: #000000; font-weight: bold;'>{p}</span>"
+                        else:
+                            label = str(p)
+                        
                         if st.button(label, key=f"page_num_{p}"):
                             st.session_state.page_num = p
                             st.rerun()
