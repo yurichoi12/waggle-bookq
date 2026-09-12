@@ -4,7 +4,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="wide")
+st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
 def get_gspread_client():
     SCOPE = [
@@ -67,20 +67,16 @@ def load_data():
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
-st.title("📚 와글 와글 독서모임 #북큐 검색")
-st.caption("모임원들이 공유한 #북큐 추천 도서와 메시지를 한눈에 확인하세요!")
+st.title("📚 와글 와글 독서모임 #북큐")
+st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
 
 try:
     items = load_data()
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        search_query = st.text_input("🔍 책 제목, 작성자, 내용 검색어 입력", placeholder="예: 채채, 스토아, 소설...")
-    with col2:
-        st.write("")
-        st.write("")
-        if st.button("🔄 새로고침"):
-            st.rerun()
+    search_query = st.text_input("🔍 검색어 입력 (책 제목, 작성자, 내용)", placeholder="예: 채채, 묘생묘세, 소설...")
+
+    if st.button("🔄 새로고침"):
+        st.rerun()
 
     filtered_items = items
     if search_query:
@@ -93,63 +89,46 @@ try:
             or query in item.get("링크", "").lower()
         ]
 
-    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지가 검색되었습니다.**")
+    st.markdown(f"**총 {len(filtered_items)}건의 #북큐 메시지**")
 
     if search_query:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
-        st.info(f"🔎 원하시는 검색 결과가 없거나 다른 책을 찾고 계신가요? **[👉 YES24에서 '{search_query}' 검색하기]({yes24_url})**")
+        st.info(f"🔎 원하시는 검색 결과가 없나요? **[👉 YES24에서 '{search_query}' 검색하기]({yes24_url})**")
 
-    st.divider()
+    st.write("")
 
     for item in filtered_items:
         with st.container():
-            # 작성자 정보 / (구분선) / 책 제목 / 본문 구조로 열 배치
-            # 비율: 작성자(1.2), 구분선(0.1), 책 제목(2), 본문(4.5)
-            c_author, c_line1, c_title, c_line2, c_content = st.columns([1.2, 0.1, 2, 0.1, 4.5])
+            # 카드 느낌을 살리기 위해 컨테이너 내부를 깔끔하게 구성
+            raw_sender = item.get("보낸사람", "익명")
+            display_name = clean_name(raw_sender)
+            date_str = item.get("작성일시", "")
             
-            with c_author:
-                raw_sender = item.get("보낸사람", "익명")
-                display_name = clean_name(raw_sender)
-                st.markdown(f"**👤 {display_name}**")
-                st.caption(f"📅 {item.get('작성일시', '')}")
+            # 상단에 작성자와 작성일시를 작고 예쁘게 배치
+            st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
+            
+            content = item.get("내용", "")
+            if "]" in content:
+                parts = content.split("]", 1)
+                title_part = parts[0].strip() + "]"
+                body_part = parts[1].strip()
                 
-            with c_line1:
-                st.markdown("---") # 세로 느낌의 구분용
-                
-            with c_title:
-                content = item.get("내용", "")
-                if "]" in content:
-                    parts = content.split("]", 1)
-                    title_part = parts[0].strip() + "]"
-                    body_part = parts[1].strip()
-                else:
-                    title_part = "📚 추천 도서"
-                    body_part = content
-                
-                # 적당한 크기의 제목 표시
-                st.markdown(f"**{title_part}**")
-                
-            with c_line2:
-                st.markdown("---")
-                
-            with c_content:
-                if "]" in content:
-                    parts = content.split("]", 1)
-                    body_part = parts[1].strip()
-                else:
-                    body_part = content
-                    
+                # 책 제목 강조
+                st.markdown(f"### {title_part}")
+                # 본문
                 st.markdown(body_part)
+            else:
+                st.markdown(content)
                 
-                link = item.get("링크", "")
-                if link:
-                    for l in link.split("\n"):
-                        l = l.strip()
-                        if l:
-                            st.markdown(f"🔗 [서점 링크 이동]({l})")
-                            
-            st.divider()
+            link = item.get("링크", "")
+            if link:
+                for l in link.split("\n"):
+                    l = l.strip()
+                    if l:
+                        st.markdown(f"🔗 [서점 링크 이동]({l})")
+                        
+            st.markdown("---")
 
 except Exception as e:
     st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
