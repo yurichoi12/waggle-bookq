@@ -6,26 +6,45 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 마음에 드셨던 깔끔한 텍스트 링크 스타일 적용
+# 전체 UI 스타일링 및 검색창/버튼 완벽 정렬 스타일
 st.markdown("""
     <style>
     div.stTextInput > div > div {
         background-color: #f3e5f5 !important;
         border-radius: 12px !important;
         border: 2px solid #8e44ad !important;
+        height: 50px !important;
     }
     div.stTextInput > div > div > input {
-        height: 50px;
+        height: 50px !important;
         font-size: 18px;
         background-color: transparent !important;
         color: #2c3e50 !important;
         border: none !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
     }
     
-    /* 깔끔한 텍스트 간격 링크 스타일 */
+    /* 검색창과 새로고침 버튼 높이 일치시키기 위한 스타일 */
+    .stButton > button {
+        height: 50px !important;
+        border-radius: 12px !important;
+        border: 2px solid #8e44ad !important;
+        background-color: #ffffff !important;
+        color: #8e44ad !important;
+        font-weight: bold !important;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #f3e5f5 !important;
+        border-color: #8e44ad !important;
+        color: #8e44ad !important;
+    }
+
+    /* 텍스트 간격 링크 스타일 */
     .page-option-link {
         color: #666666;
         text-decoration: none;
@@ -117,12 +136,11 @@ if "per_page" in query_params:
 try:
     items = load_data()
     
-    # [1행] 검색창과 새로고침 버튼
+    # [1행] 검색창과 새로고침 버튼 (세로 정렬 맞춤)
     col_search, col_refresh = st.columns([5, 1])
     with col_search:
-        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력 (예: 채채, 묘생묘세)", label_visibility="collapsed")
+        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력", label_visibility="collapsed")
     with col_refresh:
-        st.write("") 
         if st.button("🔄 새로고침", key="refresh_btn"):
             st.rerun()
 
@@ -147,7 +165,7 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수' (텍스트 나열 간격 + target=_self로 새 창 방지)
+    # [2행] 총 건수와 '한 페이지에 볼 목록 개수'
     col_count_text, col_per_page = st.columns([2, 3])
     
     with col_count_text:
