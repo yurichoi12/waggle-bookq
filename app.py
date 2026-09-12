@@ -62,6 +62,10 @@ def load_data():
         for i, h in enumerate(headers):
             item[h] = row[i] if i < len(row) else ""
         parsed_data.append(item)
+    
+    # 작성일시 기준 최신순 정렬 (역순)
+    # 날짜 문자열이 보통 "YYYY-MM-DD HH:MM:SS" 형태이므로 문자열 내림차순 정렬 시 최신순이 됩니다.
+    parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
 st.title("📚 와글 와글 독서모임 #북큐 검색")
