@@ -5,19 +5,19 @@ import gspread
 from google.oauth2.service_account import Credentials
 from collections import defaultdict
 import math
+import re
+
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
+
+# 전체 UI 스타일링 및 검색창/버튼 완벽 정렬 스타일
 st.markdown("""
     <style>
-    /* 입력 시 나타나는 Press Enter to apply 팝업 감추기 */
     div[data-testid="InputInstructions"], div[data-testid="stInputInstruction"] {
         display: none !important;
     }
-    
-    /* 검색창 컨테이너 아이콘 배치용 포지셔닝 */
     div.stTextInput > div {
         position: relative !important;
     }
-
     div.stTextInput > div > div {
         background-color: #f3e5f5 !important;
         border-radius: 12px !important;
@@ -37,8 +37,6 @@ st.markdown("""
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
     }
-
-    /* 검색창 오른쪽에 항시 노출되는 엔터 기호 버튼 스타일 */
     div.stTextInput > div::after {
         content: "↵";
         position: absolute;
@@ -51,8 +49,6 @@ st.markdown("""
         pointer-events: none;
         opacity: 0.8;
     }
-    
-    /* 검색창과 새로고침 버튼 높이 일치시키기 위한 스타일 */
     .stButton > button {
         height: 50px !important;
         border-radius: 12px !important;
@@ -67,8 +63,6 @@ st.markdown("""
         border-color: #8e44ad !important;
         color: #8e44ad !important;
     }
-
-    /* 텍스트 간격 링크 스타일 */
     .page-option-link {
         color: #666666;
         text-decoration: none;
@@ -94,7 +88,6 @@ def get_gspread_client():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    
     if "gcp_service_account" in st.secrets:
         raw = st.secrets["gcp_service_account"]
         if isinstance(raw, str):
@@ -112,7 +105,6 @@ def get_gspread_client():
     else:
         st.error("Secrets에서 인증 정보를 찾지 못했습니다.")
         st.stop()
-
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
 
@@ -136,6 +128,7 @@ def parse_book_info(item):
         body_part = content
     return title_part, body_part
 
+@st.cache_data(ttl=60)
 def load_data():
     client = get_gspread_client()
     SPREADSHEET_ID = "1wKZnnf1MuI2K0efAYZhUsq3938rjzLjOZhgnNvbz5-A"
@@ -155,10 +148,67 @@ def load_data():
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
+# 사이드바에 카카오톡 대화 파일 업로드 및 시트 업데이트 기능 추가
+st.sidebar.title("⚙️ 관리자 / 업데이트")
+uploaded_file = st.sidebar.file_uploader("카카오톡 내보내기 텍스트 파일 업로드", type=["txt"])
+
+if uploaded_file is not None:
+    if st.sidebar.button("📥 시트에 북큐 업데이트 하기"):
+        with st.spinner("카카오톡 대화를 분석하여 시트에 업데이트 중입니다..."):
+            try:
+                stringio = uploaded_file.getvalue().decode("utf-8")
+                lines = stringio.splitlines()
+                
+                # 북큐(#북큐) 메시지 파싱 로직
+                new_records = []
+                current_date = ""
+                
+                # 카카오톡 대화 형식 파싱 정규식 예시
+                # 형식: [이름] [오전 0:00] 내용 형태 혹은 날짜 변경선 감지
+                for line in lines:
+                    # 날짜 라인 감지 (예: --------------- 2026년 9월 13일 일요일 ---------------)
+                    date_match = re.search(r'([0-9]{4}년\s+[0-9]{1,2}월\s+[0-9]{1,2}일)', line)
+                    if date_match:
+                        current_date = date_match.group(1)
+                        continue
+                    
+                    # #북큐 키워드 포함 여부 확인
+                    if "#북큐" in line:
+                        # 대화 라인 파싱 시도 (예: [홍길동] [오후 8:30] #북큐 내용...)
+                        match = re.match(r'^\[(.*?)\]\s+\[(.*?)\]\s+(.*)$', line)
+                        if match:
+                            sender = match.group(1)
+                            time_str = match.group(2)
+                            content = match.group(3)
+                            
+                            # 링크 추출
+                            urls = re.findall(r'(https?://[^\s]+)', content)
+                            link_str = "\n".join(urls)
+                            
+                            full_date = f"{current_date} {time_str}" if current_date else time_str
+                            new_records.append([full_date, sender, content, link_str])
+                
+                if new_records:
+                    client = get_gspread_client()
+                    SPREADSHEET_ID = "1wKZnnf1MuI2K0efAYZhUsq3938rjzLjOZhgnNvbz5-A"
+                    doc = client.open_by_key(SPREADSHEET_ID)
+                    sheet = doc.worksheets()[0]
+                    
+                    # 기존 시트에 데이터 추가 (중복 방지 또는 단순 추가)
+                    for rec in new_records:
+                        sheet.append_row(rec)
+                        
+                    st.sidebar.success(f"총 {len(new_records)}개의 #북큐 메시지가 시트에 추가되었습니다!")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.sidebar.warning("업로드한 파일에서 '#북큐' 키워드가 포함된 메시지를 찾지 못했습니다.")
+            except Exception as e:
+                st.sidebar.error(f"업데이트 중 오류 발생: {e}")
+
 st.title("📚 와글 와글 독서모임 #북큐")
 st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
 
-# URL 쿼리 파라미터로 페이지 개수 즉시 반영
 query_params = st.query_params
 if "per_page" in query_params:
     try:
@@ -171,12 +221,12 @@ if "per_page" in query_params:
 try:
     items = load_data()
     
-    # [1행] 검색창과 새로고침 버튼 (세로 정렬 맞춤)
     col_search, col_refresh = st.columns([5, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력", label_visibility="collapsed")
     with col_refresh:
         if st.button("🔄 새로고침", key="refresh_btn"):
+            st.cache_data.clear()
             st.rerun()
 
     filtered_items = items
@@ -192,7 +242,6 @@ try:
 
     total_count = len(filtered_items)
 
-    # 세션 상태 초기화
     if "items_per_page" not in st.session_state:
         st.session_state.items_per_page = 15
     if "page_num" not in st.session_state:
@@ -200,15 +249,11 @@ try:
 
     st.write("")
 
-    # [2행] 총 건수와 '한 페이지에 볼 목록 개수'
     col_count_text, col_per_page = st.columns([2, 3])
-    
     with col_count_text:
         st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
-        
     with col_per_page:
         current_per_page = st.session_state.items_per_page
-        
         options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 볼 목록 개수:</span>"
         for opt in [15, 20, 25, 30]:
             if current_per_page == opt:
@@ -216,12 +261,10 @@ try:
             else:
                 options_html += f"<a href='?per_page={opt}' target='_self' class='page-option-link'>{opt}</a>"
         options_html += "</div>"
-        
         st.markdown(options_html, unsafe_allow_html=True)
 
     items_per_page = st.session_state.items_per_page
 
-    # 리스트에 없는 책 검색했을 때만 YES24 링크 노출
     if search_query and total_count == 0:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
@@ -240,7 +283,6 @@ try:
     st.write("")
 
     if total_count > 0:
-        # 검색어가 있을 때 중복 책(2명 이상) 그룹화 로직 적용
         if search_query:
             book_groups_dict = defaultdict(list)
             for item in filtered_items:
@@ -281,7 +323,6 @@ try:
                 
                 st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{title_p}</h3>", unsafe_allow_html=True)
                 
-                # 같은 책을 2명 이상이 추천한 경우에만 상단에 닉네임 목록 표시
                 if len(items_chrono) >= 2:
                     recommenders_html = "<div style='background-color: #f8f0fc; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #8e44ad;'>"
                     recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
@@ -318,7 +359,6 @@ try:
                 st.markdown("---")
 
         else:
-            # 평소(검색 안 했을 때)에는 개별 메시지 순서대로 출력
             total_pages = math.ceil(total_count / items_per_page)
             
             if "prev_search" not in st.session_state:
