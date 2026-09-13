@@ -36,9 +36,6 @@ st.markdown("""
     div[data-testid="InputInstructions"], div[data-testid="stInputInstruction"] {
         display: none !important;
     }
-    div.stTextInput > div {
-        position: relative !important;
-    }
     div.stTextInput > div > div {
         background-color: #f3e5f5 !important;
         border-radius: 12px !important;
@@ -53,22 +50,9 @@ st.markdown("""
         border: none !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
-        padding-right: 45px !important;
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
-    }
-    div.stTextInput > div::after {
-        content: "↵";
-        position: absolute;
-        right: 15px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 20px;
-        font-weight: bold;
-        color: #8e44ad;
-        pointer-events: none;
-        opacity: 0.8;
     }
     .stButton > button {
         height: 50px !important;
@@ -444,7 +428,7 @@ def load_data():
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
-st.title("📚 와글 와글 독서모임 #북큐")
+st.title("📚 와글 북큐 검색기")
 st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
 
 query_params = st.query_params
@@ -463,16 +447,22 @@ if "page" in query_params:
     except:
         pass
 
+def clear_search():
+    st.session_state.search_box = ""
+
 try:
     items = load_data()
 
-    col_search, col_refresh = st.columns([5, 1])
+    col_search, col_clear = st.columns([5, 1])
     with col_search:
-        search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력", label_visibility="collapsed")
-    with col_refresh:
-        if st.button("🔄 새로고침", key="refresh_btn"):
-            st.cache_data.clear()
-            st.rerun()
+        search_query = st.text_input(
+            "🔍 #북큐 통합 검색",
+            placeholder="책 제목, 작성자, 내용 입력",
+            label_visibility="collapsed",
+            key="search_box"
+        )
+    with col_clear:
+        st.button("✕ 초기화", key="clear_search_btn", on_click=clear_search, use_container_width=True)
 
     filtered_items = items
     if search_query:
@@ -522,6 +512,7 @@ try:
             '</div>',
             unsafe_allow_html=True
         )
+        st.button("🏠 전체 목록으로 돌아가기", key="back_home_btn", on_click=clear_search)
 
     st.write("")
 
