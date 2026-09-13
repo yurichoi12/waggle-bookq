@@ -155,6 +155,18 @@ st.markdown("""
         border-radius: 4px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
     }
+    details.book-card .card-links {
+        margin-bottom: 4px;
+    }
+    details.book-card .card-links:empty {
+        display: none;
+    }
+    details.book-card a.book-link {
+        display: inline-block;
+        color: #8e44ad;
+        text-decoration: underline;
+        font-size: 11px;
+    }
     details.book-card .card-preview {
         font-size: 11.5px;
         color: #555555;
@@ -164,6 +176,9 @@ st.markdown("""
         -webkit-box-orient: vertical;
         overflow: hidden;
         word-break: break-word;
+    }
+    details.book-card[open] .card-preview {
+        display: none;
     }
     details.book-card .card-date {
         font-size: 9.5px;
@@ -190,13 +205,6 @@ st.markdown("""
         color: #333333;
         white-space: pre-wrap;
         word-break: break-word;
-    }
-    details.book-card .card-full a.book-link {
-        display: inline-block;
-        margin-top: 6px;
-        color: #8e44ad;
-        text-decoration: underline;
-        font-size: 11.5px;
     }
     .recommenders-box {
         background-color: #f8f0fc;
@@ -331,7 +339,7 @@ def render_book_card(item, cover_url):
                 l_safe = html.escape(l, quote=True)
                 links_html += (
                     f'<a href="{l_safe}" target="_blank" rel="noopener noreferrer" '
-                    f'class="book-link">🔗 서점 링크 이동</a>'
+                    f'class="book-link" onclick="event.stopPropagation()">🔗 서점 링크 이동</a>'
                 )
 
     # 주의: 마크다운 렌더러가 4칸 이상 들여쓰기된 줄을 "코드블록"으로 잘못 인식해
@@ -342,10 +350,11 @@ def render_book_card(item, cover_url):
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title">{title_safe}</div>'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>'
+        f'<div class="card-links">{links_html}</div>'
         f'<div class="card-preview">{body_safe}</div>'
         f'<div class="card-date">{date_str}</div>'
         '</summary>'
-        f'<div class="card-full">{body_safe}{links_html}</div>'
+        f'<div class="card-full">{body_safe}</div>'
         '</details>'
     )
 
@@ -380,7 +389,7 @@ query_params = st.query_params
 if "per_page" in query_params:
     try:
         val = int(query_params["per_page"])
-        if val in [15, 20, 25, 30]:
+        if val in [15, 18, 21, 24]:
             st.session_state.items_per_page = val
     except:
         pass
@@ -422,7 +431,7 @@ try:
     with col_per_page:
         current_per_page = st.session_state.items_per_page
         options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 표시할 카드 개수:</span>"
-        for opt in [15, 20, 25, 30]:
+        for opt in [15, 18, 21, 24]:
             if current_per_page == opt:
                 options_html += f"<span class='page-option-selected'>{opt}</span>"
             else:
