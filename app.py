@@ -453,16 +453,12 @@ def clear_search():
 try:
     items = load_data()
 
-    col_search, col_clear = st.columns([5, 1])
-    with col_search:
-        search_query = st.text_input(
-            "🔍 #북큐 통합 검색",
-            placeholder="책 제목, 작성자, 내용 입력",
-            label_visibility="collapsed",
-            key="search_box"
-        )
-    with col_clear:
-        st.button("✕ 초기화", key="clear_search_btn", on_click=clear_search, use_container_width=True)
+    search_query = st.text_input(
+        "🔍 #북큐 통합 검색",
+        placeholder="책 제목, 작성자, 내용 입력",
+        label_visibility="collapsed",
+        key="search_box"
+    )
 
     filtered_items = items
     if search_query:
