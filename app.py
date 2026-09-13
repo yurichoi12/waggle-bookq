@@ -218,85 +218,130 @@ try:
     st.write("")
 
     if total_count > 0:
-        # 책 제목 기준 그룹화
-        book_groups_dict = defaultdict(list)
-        for item in filtered_items:
-            title_p, _ = parse_book_info(item)
-            book_groups_dict[title_p].append(item)
+        # 검색어가 있을 때 중복 책(2명 이상) 그룹화 로직 적용
+        if search_query:
+            book_groups_dict = defaultdict(list)
+            for item in filtered_items:
+                title_p, _ = parse_book_info(item)
+                book_groups_dict[title_p].append(item)
 
-        book_groups = []
-        for title_p, group_items in book_groups_dict.items():
-            # 1, 2, 3 순서 지정을 위해 시간순(오래된 순) 정렬
-            group_items_chrono = sorted(group_items, key=lambda x: x.get("작성일시", ""))
-            latest_date_val = max(i.get("작성일시", "") for i in group_items)
-            book_groups.append({
-                "title": title_p,
-                "items_chrono": group_items_chrono,
-                "latest_date": latest_date_val
-            })
+            book_groups = []
+            for title_p, group_items in book_groups_dict.items():
+                group_items_chrono = sorted(group_items, key=lambda x: x.get("작성일시", ""))
+                latest_date_val = max(i.get("작성일시", "") for i in group_items)
+                book_groups.append({
+                    "title": title_p,
+                    "items_chrono": group_items_chrono,
+                    "latest_date": latest_date_val
+                })
+            book_groups.sort(key=lambda x: x["latest_date"], reverse=True)
 
-        # 최신 활동 순으로 그룹 정렬
-        book_groups.sort(key=lambda x: x["latest_date"], reverse=True)
-
-        total_books = len(book_groups)
-        total_pages = math.ceil(total_books / items_per_page)
-        
-        if "prev_search" not in st.session_state:
-            st.session_state.prev_search = search_query
-        if st.session_state.prev_search != search_query:
-            st.session_state.page_num = 1
-            st.session_state.prev_search = search_query
-
-        if st.session_state.page_num > total_pages:
-            st.session_state.page_num = max(1, total_pages)
-
-        current_page = st.session_state.page_num
-        
-        start_idx = (current_page - 1) * items_per_page
-        end_idx = start_idx + items_per_page
-        page_book_groups = book_groups[start_idx:end_idx]
-
-        for group in page_book_groups:
-            title_p = group["title"]
-            items_chrono = group["items_chrono"]
+            total_books = len(book_groups)
+            total_pages = math.ceil(total_books / items_per_page)
             
-            # 책 제목 표시
-            st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{title_p}</h3>", unsafe_allow_html=True)
+            if "prev_search" not in st.session_state:
+                st.session_state.prev_search = search_query
+            if st.session_state.prev_search != search_query:
+                st.session_state.page_num = 1
+                st.session_state.prev_search = search_query
+
+            if st.session_state.page_num > total_pages:
+                st.session_state.page_num = max(1, total_pages)
+
+            current_page = st.session_state.page_num
+            start_idx = (current_page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            page_book_groups = book_groups[start_idx:end_idx]
+
+            for group in page_book_groups:
+                title_p = group["title"]
+                items_chrono = group["items_chrono"]
+                
+                st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{title_p}</h3>", unsafe_allow_html=True)
+                
+                # 같은 책을 2명 이상이 추천한 경우에만 상단에 닉네임 목록 표시
+                if len(items_chrono) >= 2:
+                    recommenders_html = "<div style='background-color: #f8f0fc; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #8e44ad;'>"
+                    recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
+                    for idx, item in enumerate(items_chrono, 1):
+                        raw_sender = item.get("보낸사람", "익명")
+                        display_name = clean_name(raw_sender)
+                        date_str = item.get("작성일시", "")
+                        recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{display_name}</b> <span style='color: gray; font-size: 0.85em;'>({date_str})</span></div>"
+                    recommenders_html += "</div>"
+                    st.markdown(recommenders_html, unsafe_allow_html=True)
+                
+                for idx, item in enumerate(items_chrono, 1):
+                    raw_sender = item.get("보낸사람", "익명")
+                    display_name = clean_name(raw_sender)
+                    date_str = item.get("작성일시", "")
+                    
+                    prefix = f"{idx}. " if len(items_chrono) >= 2 else ""
+                    st.markdown(f"👤 **{prefix}{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
+                    
+                    _, body_part = parse_book_info(item)
+                    st.markdown(body_part)
+                    
+                    link = item.get("링크", "")
+                    if link:
+                        for l in link.split("\n"):
+                            l = l.strip()
+                            if l:
+                                st.markdown(
+                                    f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
+                                    unsafe_allow_html=True
+                                )
+                    st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+                    
+                st.markdown("---")
+
+        else:
+            # 평소(검색 안 했을 때)에는 기존 방식대로 개별 메시지 순서대로 출력
+            total_pages = math.ceil(total_count / items_per_page)
             
-            # 상단에 닉네임 목록 표시 (1. 아무개, 2. 아무개 ...)
-            recommenders_html = "<div style='background-color: #f8f0fc; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #8e44ad;'>"
-            recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
-            for idx, item in enumerate(items_chrono, 1):
-                raw_sender = item.get("보낸사람", "익명")
-                display_name = clean_name(raw_sender)
-                date_str = item.get("작성일시", "")
-                recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{display_name}</b> <span style='color: gray; font-size: 0.85em;'>({date_str})</span></div>"
-            recommenders_html += "</div>"
-            st.markdown(recommenders_html, unsafe_allow_html=True)
-            
-            # 각 추천인의 책 소개와 링크 표시
-            for idx, item in enumerate(items_chrono, 1):
-                raw_sender = item.get("보낸사람", "익명")
-                display_name = clean_name(raw_sender)
-                date_str = item.get("작성일시", "")
-                
-                st.markdown(f"👤 **{idx}. {display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
-                
-                _, body_part = parse_book_info(item)
-                st.markdown(body_part)
-                
-                link = item.get("링크", "")
-                if link:
-                    for l in link.split("\n"):
-                        l = l.strip()
-                        if l:
-                            st.markdown(
-                                f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
-                                unsafe_allow_html=True
-                            )
-                st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
-                
-            st.markdown("---")
+            if "prev_search" not in st.session_state:
+                st.session_state.prev_search = search_query
+            if st.session_state.prev_search != search_query:
+                st.session_state.page_num = 1
+                st.session_state.prev_search = search_query
+
+            if st.session_state.page_num > total_pages:
+                st.session_state.page_num = max(1, total_pages)
+
+            current_page = st.session_state.page_num
+            start_idx = (current_page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            page_items = filtered_items[start_idx:end_idx]
+
+            for item in page_items:
+                with st.container():
+                    raw_sender = item.get("보낸사람", "익명")
+                    display_name = clean_name(raw_sender)
+                    date_str = item.get("작성일시", "")
+                    
+                    st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
+                    
+                    content = item.get("내용", "")
+                    if "]" in content:
+                        parts = content.split("]", 1)
+                        title_part = parts[0].strip() + "]"
+                        body_part = parts[1].strip()
+                        st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
+                        st.markdown(body_part)
+                    else:
+                        st.markdown(content)
+                        
+                    link = item.get("링크", "")
+                    if link:
+                        for l in link.split("\n"):
+                            l = l.strip()
+                            if l:
+                                st.markdown(
+                                    f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
+                                    unsafe_allow_html=True
+                                )
+                                
+                    st.markdown("---")
 
         if total_pages > 1:
             st.write("")
