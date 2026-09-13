@@ -334,18 +334,20 @@ def render_book_card(item, cover_url):
                     f'class="book-link">🔗 서점 링크 이동</a>'
                 )
 
-    return f"""
-    <details class="book-card">
-        <summary>
-            <div class="card-nickname">👤 {display_name}</div>
-            <div class="card-title">{title_safe}</div>
-            <div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>
-            <div class="card-preview">{body_safe}</div>
-            <div class="card-date">{date_str}</div>
-        </summary>
-        <div class="card-full">{body_safe}{links_html}</div>
-    </details>
-    """
+    # 주의: 마크다운 렌더러가 4칸 이상 들여쓰기된 줄을 "코드블록"으로 잘못 인식해
+    # HTML이 깨지는 문제가 있어, 아래 HTML은 반드시 들여쓰기 없이 한 줄로 이어붙여야 합니다.
+    return (
+        '<details class="book-card">'
+        '<summary>'
+        f'<div class="card-nickname">👤 {display_name}</div>'
+        f'<div class="card-title">{title_safe}</div>'
+        f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>'
+        f'<div class="card-preview">{body_safe}</div>'
+        f'<div class="card-date">{date_str}</div>'
+        '</summary>'
+        f'<div class="card-full">{body_safe}{links_html}</div>'
+        '</details>'
+    )
 
 def render_book_grid(items, covers):
     cards = "".join(render_book_card(item, covers.get(first_link(item.get("링크", "")))) for item in items)
@@ -434,14 +436,12 @@ try:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
         st.markdown(
-            f"""
-            <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin: 15px 0; font-size: 15px; border-left: 4px solid #8e44ad;">
-                🔎 리스트에 없는 책입니다!
-                <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">
-                    👉 YES24에서 '{search_query}' 검색하기
-                </a>
-            </div>
-            """,
+            '<div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin: 15px 0; font-size: 15px; border-left: 4px solid #8e44ad;">'
+            '🔎 리스트에 없는 책입니다! '
+            f'<a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">'
+            f"👉 YES24에서 '{search_query}' 검색하기"
+            '</a>'
+            '</div>',
             unsafe_allow_html=True
         )
 
