@@ -105,6 +105,57 @@ st.markdown("""
         margin-left: 10px;
     }
 
+    /* ===== 페이지 이동 네비게이션 (모바일에서도 한 줄 유지) ===== */
+    .page-nav-row {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+    }
+    .page-nav-btn {
+        flex: 0 0 auto;
+        display: inline-block;
+        padding: 6px 8px;
+        border: 1.5px solid #8e44ad;
+        border-radius: 8px;
+        color: #8e44ad;
+        font-size: 12px;
+        font-weight: bold;
+        text-decoration: none;
+        text-align: center;
+        white-space: nowrap;
+        background-color: #ffffff;
+    }
+    .page-nav-btn:hover {
+        background-color: #f3e5f5;
+    }
+    .page-nav-btn.page-nav-disabled {
+        color: #cccccc;
+        border-color: #e5e5e5;
+        cursor: default;
+        background-color: #fafafa;
+    }
+    .page-nav-info {
+        flex: 0 0 auto;
+        font-size: 13px;
+        font-weight: bold;
+        color: #2c3e50;
+        white-space: nowrap;
+        padding: 0 6px;
+    }
+    @media (max-width: 480px) {
+        .page-nav-btn {
+            padding: 6px 6px;
+            font-size: 11px;
+        }
+        .page-nav-info {
+            font-size: 12px;
+            padding: 0 3px;
+        }
+    }
+
     /* ===== 북큐 카드 그리드 ===== */
     .book-grid {
         display: grid;
@@ -404,6 +455,13 @@ if "per_page" in query_params:
             st.session_state.items_per_page = val
     except:
         pass
+if "page" in query_params:
+    try:
+        pval = int(query_params["page"])
+        if pval >= 1:
+            st.session_state.page_num = pval
+    except:
+        pass
 
 try:
     items = load_data()
@@ -548,32 +606,23 @@ try:
 
         if total_pages > 1:
             st.write("")
-            col_prev, col_info, col_next = st.columns([1, 2, 1])
-            with col_prev:
-                if st.button("◀ 이전", disabled=(current_page == 1), key="prev_page_btn", use_container_width=True):
-                    st.session_state.page_num -= 1
-                    st.rerun()
-            with col_info:
-                st.markdown(
-                    f"<div style='text-align:center; padding-top:10px; font-weight:bold; color:#2c3e50;'>{current_page} / {total_pages} 페이지</div>",
-                    unsafe_allow_html=True
-                )
-            with col_next:
-                if st.button("다음 ▶", disabled=(current_page == total_pages), key="next_page_btn", use_container_width=True):
-                    st.session_state.page_num += 1
-                    st.rerun()
-
-            if total_pages > 3:
-                selected_page = st.selectbox(
-                    "페이지 바로가기",
-                    options=list(range(1, total_pages + 1)),
-                    index=current_page - 1,
-                    key="page_jump_select",
-                    label_visibility="collapsed"
-                )
-                if selected_page != current_page:
-                    st.session_state.page_num = selected_page
-                    st.rerun()
+            if current_page > 1:
+                first_btn = '<a href="?page=1" target="_self" class="page-nav-btn">« 맨앞</a>'
+                prev_btn = f'<a href="?page={current_page - 1}" target="_self" class="page-nav-btn">‹ 이전</a>'
+            else:
+                first_btn = '<span class="page-nav-btn page-nav-disabled">« 맨앞</span>'
+                prev_btn = '<span class="page-nav-btn page-nav-disabled">‹ 이전</span>'
+            if current_page < total_pages:
+                next_btn = f'<a href="?page={current_page + 1}" target="_self" class="page-nav-btn">다음 ›</a>'
+                last_btn = f'<a href="?page={total_pages}" target="_self" class="page-nav-btn">맨뒤 »</a>'
+            else:
+                next_btn = '<span class="page-nav-btn page-nav-disabled">다음 ›</span>'
+                last_btn = '<span class="page-nav-btn page-nav-disabled">맨뒤 »</span>'
+            page_info = f'<span class="page-nav-info">{current_page} / {total_pages}</span>'
+            st.markdown(
+                f'<div class="page-nav-row">{first_btn}{prev_btn}{page_info}{next_btn}{last_btn}</div>',
+                unsafe_allow_html=True
+            )
 
 except Exception as e:
     st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
