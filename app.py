@@ -101,6 +101,58 @@ st.markdown("""
         border-width: 1px !important;
         border-radius: 6px !important;
     }
+    .st-key-home_btn_wrap_bottom {
+        display: flex;
+        justify-content: center;
+        margin-top: 18px;
+    }
+    .st-key-home_btn_wrap_bottom .stButton > button {
+        height: auto !important;
+        min-height: unset !important;
+        width: auto !important;
+        padding: 6px 18px !important;
+        font-size: 13px !important;
+        border-width: 1.5px !important;
+        border-radius: 8px !important;
+    }
+
+    /* ===== 같은 책 제목으로 여러 명이 올렸을 때의 그룹 표시 ===== */
+    .title-group-block {
+        margin-bottom: 4px;
+    }
+    .title-group-header {
+        font-size: 15px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 18px 0 8px 0;
+    }
+    .recommenders-box {
+        background-color: #f3e5f5;
+        border-left: 4px solid #8e44ad;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 10px;
+        font-size: 13px;
+        color: #2c3e50;
+    }
+    .recommenders-box .recommenders-title {
+        font-weight: bold;
+        color: #8e44ad;
+        margin-bottom: 4px;
+        display: block;
+    }
+    .recommenders-box ol {
+        margin: 0;
+        padding-left: 18px;
+    }
+    .recommenders-box li {
+        margin-bottom: 2px;
+    }
+    .recommenders-box .rec-date {
+        color: #999999;
+        font-size: 11px;
+        margin-left: 4px;
+    }
 
     /* ===== 페이지 이동 네비게이션 (모바일에서도 한 줄 유지) ===== */
     .page-nav-row {
@@ -313,10 +365,12 @@ def parse_book_info(item):
         parts = content.split("]", 1)
         title_part = parts[0].strip() + "]"
         body_part = parts[1].strip()
+        is_real_title = True
     else:
         title_part = content[:25].strip() + "..." if len(content) > 25 else content
         body_part = content
-    return title_part, body_part
+        is_real_title = False
+    return title_part, body_part, is_real_title
 
 def first_link(raw_link):
     if not raw_link:
@@ -375,7 +429,7 @@ def render_book_card(item, cover_url):
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
-    title_p, body_part = parse_book_info(item)
+    title_p, body_part, _ = parse_book_info(item)
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
@@ -413,6 +467,28 @@ def render_book_card(item, cover_url):
 def render_book_grid(items, covers):
     cards = "".join(render_book_card(item, covers.get(first_link(item.get("링크", "")))) for item in items)
     st.markdown(f'<div class="book-grid">{cards}</div>', unsafe_allow_html=True)
+
+def render_title_group(title, group_items, covers):
+    """제목이 대괄호로 정확히 일치하는 항목이 2건 이상일 때, 헤더 + 추천한 모임원
+    박스를 보여준 뒤 해당 항목들을 카드 그리드로 표시합니다."""
+    group_items_sorted = sorted(group_items, key=lambda x: x.get("작성일시", ""))
+    rec_rows = ""
+    for item in group_items_sorted:
+        name_safe = html.escape(clean_name(item.get("보낸사람", "익명")))
+        date_safe = html.escape(item.get("작성일시", ""))
+        rec_rows += f'<li><b>{name_safe}</b><span class="rec-date">({date_safe})</span></li>'
+    title_safe = html.escape(title)
+    header_html = (
+        '<div class="title-group-block">'
+        f'<div class="title-group-header">📚 {title_safe}</div>'
+        '<div class="recommenders-box">'
+        '<span class="recommenders-title">🗒️ 추천한 모임원</span>'
+        f'<ol>{rec_rows}</ol>'
+        '</div>'
+        '</div>'
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
+    render_book_grid(group_items_sorted, covers)
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -538,7 +614,47 @@ try:
         page_items = filtered_items[start_idx:end_idx]
 
         covers = preload_covers(page_items)
-        render_book_grid(page_items, covers)
+
+        # 검색 중일 때, 대괄호로 표시된 정식 책 제목이 완전히 똑같은 항목이
+        # 2건 이상이면 "추천한 모임원" 그룹으로 묶어서 보여줍니다.
+        # (제목이 없어 앞 25자로 대체 표시되는 항목은 절대 서로 그룹으로 묶지 않습니다 -
+        #  서로 다른 사람의 무관한 메시지가 우연히 같은 제목으로 섞여 보이는 오류를 방지하기 위함)
+        title_counts = {}
+        if search_query:
+            for item in page_items:
+                title_p, _, is_real = parse_book_info(item)
+                if is_real:
+                    title_counts[title_p] = title_counts.get(title_p, 0) + 1
+        grouped_titles = {k for k, v in title_counts.items() if v >= 2}
+
+        if grouped_titles:
+            buffer = []
+            rendered_groups = set()
+
+            def flush_buffer():
+                if buffer:
+                    render_book_grid(buffer, covers)
+                    buffer.clear()
+
+            group_items_map = {}
+            for item in page_items:
+                title_p, _, is_real = parse_book_info(item)
+                if is_real and title_p in grouped_titles:
+                    group_items_map.setdefault(title_p, []).append(item)
+
+            for item in page_items:
+                title_p, _, is_real = parse_book_info(item)
+                if is_real and title_p in grouped_titles:
+                    if title_p in rendered_groups:
+                        continue
+                    rendered_groups.add(title_p)
+                    flush_buffer()
+                    render_title_group(title_p, group_items_map[title_p], covers)
+                else:
+                    buffer.append(item)
+            flush_buffer()
+        else:
+            render_book_grid(page_items, covers)
 
         if total_pages > 1:
             st.write("")
@@ -559,6 +675,11 @@ try:
                 f'<div class="page-nav-row">{first_btn}{prev_btn}{page_info}{next_btn}{last_btn}</div>',
                 unsafe_allow_html=True
             )
+
+    if search_query:
+        st.write("")
+        with st.container(key="home_btn_wrap_bottom"):
+            st.button("🏠 전체 목록으로", key="back_home_btn_bottom", on_click=clear_search)
 
 except Exception as e:
     st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
