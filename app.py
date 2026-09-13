@@ -371,64 +371,6 @@ def load_data():
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
     return parsed_data
 
-# 사이드바에 카카오톡 대화 파일 업로드 및 시트 업데이트 기능 추가
-st.sidebar.title("⚙️ 관리자 / 업데이트")
-uploaded_file = st.sidebar.file_uploader("카카오톡 내보내기 텍스트 파일 업로드", type=["txt"])
-
-if uploaded_file is not None:
-    if st.sidebar.button("📥 시트에 북큐 업데이트 하기"):
-        with st.spinner("카카오톡 대화를 분석하여 시트에 업데이트 중입니다..."):
-            try:
-                stringio = uploaded_file.getvalue().decode("utf-8")
-                lines = stringio.splitlines()
-
-                # 북큐(#북큐) 메시지 파싱 로직
-                new_records = []
-                current_date = ""
-
-                # 카카오톡 대화 형식 파싱 정규식 예시
-                # 형식: [이름] [오전 0:00] 내용 형태 혹은 날짜 변경선 감지
-                for line in lines:
-                    # 날짜 라인 감지 (예: --------------- 2026년 9월 13일 일요일 ---------------)
-                    date_match = re.search(r'([0-9]{4}년\s+[0-9]{1,2}월\s+[0-9]{1,2}일)', line)
-                    if date_match:
-                        current_date = date_match.group(1)
-                        continue
-
-                    # #북큐 키워드 포함 여부 확인
-                    if "#북큐" in line:
-                        # 대화 라인 파싱 시도 (예: [홍길동] [오후 8:30] #북큐 내용...)
-                        match = re.match(r'^\[(.*?)\]\s+\[(.*?)\]\s+(.*)$', line)
-                        if match:
-                            sender = match.group(1)
-                            time_str = match.group(2)
-                            content = match.group(3)
-
-                            # 링크 추출
-                            urls = re.findall(r'(https?://[^\s]+)', content)
-                            link_str = "\n".join(urls)
-
-                            full_date = f"{current_date} {time_str}" if current_date else time_str
-                            new_records.append([full_date, sender, content, link_str])
-
-                if new_records:
-                    client = get_gspread_client()
-                    SPREADSHEET_ID = "1wKZnnf1MuI2K0efAYZhUsq3938rjzLjOZhgnNvbz5-A"
-                    doc = client.open_by_key(SPREADSHEET_ID)
-                    sheet = doc.worksheets()[0]
-
-                    # 기존 시트에 데이터 추가 (중복 방지 또는 단순 추가)
-                    for rec in new_records:
-                        sheet.append_row(rec)
-
-                    st.sidebar.success(f"총 {len(new_records)}개의 #북큐 메시지가 시트에 추가되었습니다!")
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.sidebar.warning("업로드한 파일에서 '#북큐' 키워드가 포함된 메시지를 찾지 못했습니다.")
-            except Exception as e:
-                st.sidebar.error(f"업데이트 중 오류 발생: {e}")
-
 st.title("📚 와글 와글 독서모임 #북큐")
 st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
 
