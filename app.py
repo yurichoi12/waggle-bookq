@@ -11,6 +11,16 @@ st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_i
 # 전체 UI 스타일링 및 검색창/버튼 완벽 정렬 스타일
 st.markdown("""
     <style>
+    /* 입력 시 나타나는 Press Enter to apply 팝업 감추기 */
+    div[data-testid="InputInstructions"] {
+        display: none !important;
+    }
+    
+    /* 검색창 컨테이너 아이콘 배치용 포지셔닝 */
+    div.stTextInput > div {
+        position: relative !important;
+    }
+
     div.stTextInput > div > div {
         background-color: #f3e5f5 !important;
         border-radius: 12px !important;
@@ -25,9 +35,24 @@ st.markdown("""
         border: none !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
+        padding-right: 45px !important; /* 오른쪽 아이콘과 글자 겹침 방지 */
     }
     div.stTextInput > div > div > input:focus {
         box-shadow: none !important;
+    }
+
+    /* 검색창 오른쪽에 항시 노출되는 엔터 기호 버튼 스타일 */
+    div.stTextInput > div::after {
+        content: "↵";
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        font-weight: bold;
+        color: #8e44ad;
+        pointer-events: none;
+        opacity: 0.8;
     }
     
     /* 검색창과 새로고침 버튼 높이 일치시키기 위한 스타일 */
