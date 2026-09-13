@@ -3,6 +3,8 @@ import urllib.parse
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
+from collections import defaultdict
+import math
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
@@ -101,6 +103,17 @@ def clean_name(raw_name):
             name = name.split(delimiter)[0]
     return name.strip() if name.strip() else "익명"
 
+def parse_book_info(item):
+    content = item.get("내용", "")
+    if "]" in content:
+        parts = content.split("]", 1)
+        title_part = parts[0].strip() + "]"
+        body_part = parts[1].strip()
+    else:
+        title_part = content[:25].strip() + "..." if len(content) > 25 else content
+        body_part = content
+    return title_part, body_part
+
 def load_data():
     client = get_gspread_client()
     SPREADSHEET_ID = "1wKZnnf1MuI2K0efAYZhUsq3938rjzLjOZhgnNvbz5-A"
@@ -186,13 +199,14 @@ try:
 
     items_per_page = st.session_state.items_per_page
 
-    if search_query:
+    # 리스트에 없는 책 검색했을 때만 YES24 링크 노출
+    if search_query and total_count == 0:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
         st.markdown(
             f"""
             <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin: 15px 0; font-size: 15px; border-left: 4px solid #8e44ad;">
-                🔎 원하시는 검색 결과가 없나요? 
+                🔎 리스트에 없는 책입니다! 
                 <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">
                     👉 YES24에서 '{search_query}' 검색하기
                 </a>
@@ -204,8 +218,28 @@ try:
     st.write("")
 
     if total_count > 0:
-        import math
-        total_pages = math.ceil(total_count / items_per_page)
+        # 책 제목 기준 그룹화
+        book_groups_dict = defaultdict(list)
+        for item in filtered_items:
+            title_p, _ = parse_book_info(item)
+            book_groups_dict[title_p].append(item)
+
+        book_groups = []
+        for title_p, group_items in book_groups_dict.items():
+            # 1, 2, 3 순서 지정을 위해 시간순(오래된 순) 정렬
+            group_items_chrono = sorted(group_items, key=lambda x: x.get("작성일시", ""))
+            latest_date_val = max(i.get("작성일시", "") for i in group_items)
+            book_groups.append({
+                "title": title_p,
+                "items_chrono": group_items_chrono,
+                "latest_date": latest_date_val
+            })
+
+        # 최신 활동 순으로 그룹 정렬
+        book_groups.sort(key=lambda x: x["latest_date"], reverse=True)
+
+        total_books = len(book_groups)
+        total_pages = math.ceil(total_books / items_per_page)
         
         if "prev_search" not in st.session_state:
             st.session_state.prev_search = search_query
@@ -220,26 +254,37 @@ try:
         
         start_idx = (current_page - 1) * items_per_page
         end_idx = start_idx + items_per_page
-        page_items = filtered_items[start_idx:end_idx]
+        page_book_groups = book_groups[start_idx:end_idx]
 
-        for item in page_items:
-            with st.container():
+        for group in page_book_groups:
+            title_p = group["title"]
+            items_chrono = group["items_chrono"]
+            
+            # 책 제목 표시
+            st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{title_p}</h3>", unsafe_allow_html=True)
+            
+            # 상단에 닉네임 목록 표시 (1. 아무개, 2. 아무개 ...)
+            recommenders_html = "<div style='background-color: #f8f0fc; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #8e44ad;'>"
+            recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
+            for idx, item in enumerate(items_chrono, 1):
+                raw_sender = item.get("보낸사람", "익명")
+                display_name = clean_name(raw_sender)
+                date_str = item.get("작성일시", "")
+                recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{display_name}</b> <span style='color: gray; font-size: 0.85em;'>({date_str})</span></div>"
+            recommenders_html += "</div>"
+            st.markdown(recommenders_html, unsafe_allow_html=True)
+            
+            # 각 추천인의 책 소개와 링크 표시
+            for idx, item in enumerate(items_chrono, 1):
                 raw_sender = item.get("보낸사람", "익명")
                 display_name = clean_name(raw_sender)
                 date_str = item.get("작성일시", "")
                 
-                st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
+                st.markdown(f"👤 **{idx}. {display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
                 
-                content = item.get("내용", "")
-                if "]" in content:
-                    parts = content.split("]", 1)
-                    title_part = parts[0].strip() + "]"
-                    body_part = parts[1].strip()
-                    st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
-                    st.markdown(body_part)
-                else:
-                    st.markdown(content)
-                    
+                _, body_part = parse_book_info(item)
+                st.markdown(body_part)
+                
                 link = item.get("링크", "")
                 if link:
                     for l in link.split("\n"):
@@ -249,8 +294,9 @@ try:
                                 f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
                                 unsafe_allow_html=True
                             )
-                            
-                st.markdown("---")
+                st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+                
+            st.markdown("---")
 
         if total_pages > 1:
             st.write("")
