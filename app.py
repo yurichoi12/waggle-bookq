@@ -7,7 +7,6 @@ import streamlit as st
 import gspread
 import requests
 from google.oauth2.service_account import Credentials
-from collections import defaultdict
 import math
 import re
 
@@ -87,6 +86,20 @@ st.markdown("""
         font-weight: bold;
         font-size: 14px;
         margin-left: 10px;
+    }
+    .st-key-home_btn_wrap {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 4px;
+    }
+    .st-key-home_btn_wrap .stButton > button {
+        height: auto !important;
+        min-height: unset !important;
+        width: auto !important;
+        padding: 3px 10px !important;
+        font-size: 11px !important;
+        border-width: 1px !important;
+        border-radius: 6px !important;
     }
 
     /* ===== 페이지 이동 네비게이션 (모바일에서도 한 줄 유지) ===== */
@@ -246,13 +259,6 @@ st.markdown("""
         font-size: 9.5px;
         color: #aaaaaa;
         margin-top: 5px;
-    }
-    .recommenders-box {
-        background-color: #f8f0fc;
-        padding: 12px 15px;
-        border-radius: 8px;
-        margin-bottom: 12px;
-        border-left: 4px solid #8e44ad;
     }
     @media (max-width: 480px) {
         .book-grid {
@@ -493,11 +499,11 @@ try:
                 options_html += f"<a href='?per_page={opt}' target='_self' class='page-option-link'>{opt}</a>"
         options_html += "</div>"
         st.markdown(options_html, unsafe_allow_html=True)
+        if search_query:
+            with st.container(key="home_btn_wrap"):
+                st.button("🏠 전체 목록으로", key="back_home_btn", on_click=clear_search)
 
     items_per_page = st.session_state.items_per_page
-
-    if search_query:
-        st.button("🏠 전체 목록으로 돌아가기", key="back_home_btn", on_click=clear_search)
 
     if search_query and total_count == 0:
         encoded_query = urllib.parse.quote(search_query)
@@ -515,83 +521,24 @@ try:
     st.write("")
 
     if total_count > 0:
-        if search_query:
-            book_groups_dict = defaultdict(list)
-            for item in filtered_items:
-                title_p, _ = parse_book_info(item)
-                book_groups_dict[title_p].append(item)
+        total_pages = math.ceil(total_count / items_per_page)
 
-            book_groups = []
-            for title_p, group_items in book_groups_dict.items():
-                group_items_chrono = sorted(group_items, key=lambda x: x.get("작성일시", ""))
-                latest_date_val = max(i.get("작성일시", "") for i in group_items)
-                book_groups.append({
-                    "title": title_p,
-                    "items_chrono": group_items_chrono,
-                    "latest_date": latest_date_val
-                })
-            book_groups.sort(key=lambda x: x["latest_date"], reverse=True)
+        if "prev_search" not in st.session_state:
+            st.session_state.prev_search = search_query
+        if st.session_state.prev_search != search_query:
+            st.session_state.page_num = 1
+            st.session_state.prev_search = search_query
 
-            total_books = len(book_groups)
-            total_pages = math.ceil(total_books / items_per_page)
+        if st.session_state.page_num > total_pages:
+            st.session_state.page_num = max(1, total_pages)
 
-            if "prev_search" not in st.session_state:
-                st.session_state.prev_search = search_query
-            if st.session_state.prev_search != search_query:
-                st.session_state.page_num = 1
-                st.session_state.prev_search = search_query
+        current_page = st.session_state.page_num
+        start_idx = (current_page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        page_items = filtered_items[start_idx:end_idx]
 
-            if st.session_state.page_num > total_pages:
-                st.session_state.page_num = max(1, total_pages)
-
-            current_page = st.session_state.page_num
-            start_idx = (current_page - 1) * items_per_page
-            end_idx = start_idx + items_per_page
-            page_book_groups = book_groups[start_idx:end_idx]
-
-            # 이 페이지에 필요한 표지 이미지를 한 번에 병렬로 준비
-            page_items_flat = [item for group in page_book_groups for item in group["items_chrono"]]
-            covers = preload_covers(page_items_flat)
-
-            for group in page_book_groups:
-                title_p = group["title"]
-                items_chrono = group["items_chrono"]
-
-                st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{html.escape(title_p)}</h3>", unsafe_allow_html=True)
-
-                if len(items_chrono) >= 2:
-                    recommenders_html = "<div class='recommenders-box'>"
-                    recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
-                    for idx, item in enumerate(items_chrono, 1):
-                        raw_sender = item.get("보낸사람", "익명")
-                        display_name = clean_name(raw_sender)
-                        date_str = item.get("작성일시", "")
-                        recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{html.escape(display_name)}</b> <span style='color: gray; font-size: 0.85em;'>({html.escape(date_str)})</span></div>"
-                    recommenders_html += "</div>"
-                    st.markdown(recommenders_html, unsafe_allow_html=True)
-
-                render_book_grid(items_chrono, covers)
-                st.markdown("---")
-
-        else:
-            total_pages = math.ceil(total_count / items_per_page)
-
-            if "prev_search" not in st.session_state:
-                st.session_state.prev_search = search_query
-            if st.session_state.prev_search != search_query:
-                st.session_state.page_num = 1
-                st.session_state.prev_search = search_query
-
-            if st.session_state.page_num > total_pages:
-                st.session_state.page_num = max(1, total_pages)
-
-            current_page = st.session_state.page_num
-            start_idx = (current_page - 1) * items_per_page
-            end_idx = start_idx + items_per_page
-            page_items = filtered_items[start_idx:end_idx]
-
-            covers = preload_covers(page_items)
-            render_book_grid(page_items, covers)
+        covers = preload_covers(page_items)
+        render_book_grid(page_items, covers)
 
         if total_pages > 1:
             st.write("")
