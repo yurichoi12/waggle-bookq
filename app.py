@@ -496,6 +496,9 @@ try:
 
     items_per_page = st.session_state.items_per_page
 
+    if search_query:
+        st.button("🏠 전체 목록으로 돌아가기", key="back_home_btn", on_click=clear_search)
+
     if search_query and total_count == 0:
         encoded_query = urllib.parse.quote(search_query)
         yes24_url = f"https://www.yes24.com/Product/Search?domain=ALL&query={encoded_query}"
@@ -508,7 +511,6 @@ try:
             '</div>',
             unsafe_allow_html=True
         )
-        st.button("🏠 전체 목록으로 돌아가기", key="back_home_btn", on_click=clear_search)
 
     st.write("")
 
