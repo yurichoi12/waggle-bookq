@@ -1,5 +1,6 @@
 import json
 import html
+import itertools
 import urllib.parse
 import concurrent.futures
 import streamlit as st
@@ -111,21 +112,17 @@ st.markdown("""
         gap: 10px;
         margin: 10px 0 18px 0;
     }
-    details.book-card {
+    .book-card {
         background-color: #ffffff;
         border: 1px solid #ececec;
         border-radius: 10px;
         padding: 8px 8px 10px 8px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     }
-    details.book-card summary {
-        list-style: none;
-        cursor: pointer;
-    }
-    details.book-card summary::-webkit-details-marker {
+    .book-card .card-toggle {
         display: none;
     }
-    details.book-card .card-nickname {
+    .book-card .card-nickname {
         font-size: 11px;
         font-weight: bold;
         color: #8e44ad;
@@ -133,7 +130,7 @@ st.markdown("""
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    details.book-card .card-title {
+    .book-card .card-title {
         font-size: 12.5px;
         font-weight: bold;
         color: #2c3e50;
@@ -144,30 +141,34 @@ st.markdown("""
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
-    details.book-card .card-cover {
+    .book-card .card-cover {
         text-align: center;
         margin-bottom: 6px;
     }
-    details.book-card .card-cover img {
+    .book-card .card-cover img {
         width: 56px;
         height: 78px;
         object-fit: cover;
         border-radius: 4px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
     }
-    details.book-card .card-links {
+    .book-card .card-links {
         margin-bottom: 4px;
     }
-    details.book-card .card-links:empty {
+    .book-card .card-links:empty {
         display: none;
     }
-    details.book-card a.book-link {
+    .book-card a.book-link {
         display: inline-block;
         color: #8e44ad;
         text-decoration: underline;
         font-size: 11px;
     }
-    details.book-card .card-preview {
+    .book-card .card-body-wrap {
+        display: block;
+        cursor: pointer;
+    }
+    .book-card .card-body-text {
         font-size: 11.5px;
         color: #555555;
         line-height: 1.4;
@@ -176,17 +177,9 @@ st.markdown("""
         -webkit-box-orient: vertical;
         overflow: hidden;
         word-break: break-word;
+        white-space: pre-wrap;
     }
-    details.book-card[open] .card-preview {
-        display: none;
-    }
-    details.book-card .card-date {
-        font-size: 9.5px;
-        color: #aaaaaa;
-        margin-top: 5px;
-    }
-    details.book-card summary::after {
-        content: "▼ 더보기";
+    .book-card .more-toggle {
         display: block;
         text-align: center;
         font-size: 9.5px;
@@ -194,17 +187,30 @@ st.markdown("""
         margin-top: 5px;
         opacity: 0.8;
     }
-    details.book-card[open] summary::after {
-        content: "▲ 접기";
-    }
-    details.book-card .card-full {
+    .book-card .less-toggle {
+        display: none;
+        text-align: center;
+        font-size: 9.5px;
+        color: #8e44ad;
         margin-top: 8px;
-        padding-top: 8px;
+        padding-top: 6px;
         border-top: 1px dashed #e2d3ec;
-        font-size: 12px;
-        color: #333333;
-        white-space: pre-wrap;
-        word-break: break-word;
+        cursor: pointer;
+    }
+    .book-card .card-toggle:checked ~ .card-body-wrap .card-body-text {
+        -webkit-line-clamp: unset;
+        display: block;
+    }
+    .book-card .card-toggle:checked ~ .card-body-wrap .more-toggle {
+        display: none;
+    }
+    .book-card .card-toggle:checked ~ .less-toggle {
+        display: block;
+    }
+    .book-card .card-date {
+        font-size: 9.5px;
+        color: #aaaaaa;
+        margin-top: 5px;
     }
     .recommenders-box {
         background-color: #f8f0fc;
@@ -218,7 +224,7 @@ st.markdown("""
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
         }
-        details.book-card .card-cover img {
+        .book-card .card-cover img {
             width: 50px;
             height: 70px;
         }
@@ -321,7 +327,10 @@ def preload_covers(items):
                 covers[l] = None
     return covers
 
+_card_id_counter = itertools.count()
+
 def render_book_card(item, cover_url):
+    card_id = f"card-toggle-{next(_card_id_counter)}"
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
@@ -345,17 +354,19 @@ def render_book_card(item, cover_url):
     # 주의: 마크다운 렌더러가 4칸 이상 들여쓰기된 줄을 "코드블록"으로 잘못 인식해
     # HTML이 깨지는 문제가 있어, 아래 HTML은 반드시 들여쓰기 없이 한 줄로 이어붙여야 합니다.
     return (
-        '<details class="book-card">'
-        '<summary>'
+        '<div class="book-card">'
+        f'<input type="checkbox" class="card-toggle" id="{card_id}">'
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title">{title_safe}</div>'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>'
         f'<div class="card-links">{links_html}</div>'
-        f'<div class="card-preview">{body_safe}</div>'
+        f'<label for="{card_id}" class="card-body-wrap">'
+        f'<div class="card-body-text">{body_safe}</div>'
+        '<span class="more-toggle">▼ 더보기</span>'
+        '</label>'
+        f'<label for="{card_id}" class="less-toggle">▲ 접기</label>'
         f'<div class="card-date">{date_str}</div>'
-        '</summary>'
-        f'<div class="card-full">{body_safe}</div>'
-        '</details>'
+        '</div>'
     )
 
 def render_book_grid(items, covers):
