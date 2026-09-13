@@ -1,7 +1,10 @@
 import json
+import html
 import urllib.parse
+import concurrent.futures
 import streamlit as st
 import gspread
+import requests
 from google.oauth2.service_account import Credentials
 from collections import defaultdict
 import math
@@ -9,7 +12,24 @@ import re
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
-# 전체 UI 스타일링 및 검색창/버튼 완벽 정렬 스타일
+# 책 표지가 없을 때 사용할 기본 아이콘 (작은 책 모양 SVG)
+PLACEHOLDER_COVER = "data:image/svg+xml;utf8," + urllib.parse.quote(
+    """<svg xmlns='http://www.w3.org/2000/svg' width='60' height='84' viewBox='0 0 60 84'>
+    <rect width='60' height='84' rx='4' fill='#f3e5f5'/>
+    <rect x='6' y='10' width='48' height='6' rx='2' fill='#d5b8e0'/>
+    <rect x='6' y='22' width='36' height='5' rx='2' fill='#e3cdec'/>
+    <rect x='6' y='32' width='40' height='5' rx='2' fill='#e3cdec'/>
+    <text x='30' y='66' font-size='22' text-anchor='middle'>📖</text>
+    </svg>"""
+)
+
+COVER_FETCH_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+# 전체 UI 스타일링 및 검색창/버튼/카드 레이아웃 스타일
 st.markdown("""
     <style>
     div[data-testid="InputInstructions"], div[data-testid="stInputInstruction"] {
@@ -63,6 +83,9 @@ st.markdown("""
         border-color: #8e44ad !important;
         color: #8e44ad !important;
     }
+    .stButton > button:disabled {
+        opacity: 0.4 !important;
+    }
     .page-option-link {
         color: #666666;
         text-decoration: none;
@@ -79,6 +102,118 @@ st.markdown("""
         font-weight: bold;
         font-size: 14px;
         margin-left: 10px;
+    }
+
+    /* ===== 북큐 카드 그리드 ===== */
+    .book-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin: 10px 0 18px 0;
+    }
+    details.book-card {
+        background-color: #ffffff;
+        border: 1px solid #ececec;
+        border-radius: 10px;
+        padding: 8px 8px 10px 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    }
+    details.book-card summary {
+        list-style: none;
+        cursor: pointer;
+    }
+    details.book-card summary::-webkit-details-marker {
+        display: none;
+    }
+    details.book-card .card-nickname {
+        font-size: 11px;
+        font-weight: bold;
+        color: #8e44ad;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    details.book-card .card-title {
+        font-size: 12.5px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 3px 0 6px 0;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    details.book-card .card-cover {
+        text-align: center;
+        margin-bottom: 6px;
+    }
+    details.book-card .card-cover img {
+        width: 56px;
+        height: 78px;
+        object-fit: cover;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    }
+    details.book-card .card-preview {
+        font-size: 11.5px;
+        color: #555555;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+    details.book-card .card-date {
+        font-size: 9.5px;
+        color: #aaaaaa;
+        margin-top: 5px;
+    }
+    details.book-card summary::after {
+        content: "▼ 더보기";
+        display: block;
+        text-align: center;
+        font-size: 9.5px;
+        color: #8e44ad;
+        margin-top: 5px;
+        opacity: 0.8;
+    }
+    details.book-card[open] summary::after {
+        content: "▲ 접기";
+    }
+    details.book-card .card-full {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed #e2d3ec;
+        font-size: 12px;
+        color: #333333;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    details.book-card .card-full a.book-link {
+        display: inline-block;
+        margin-top: 6px;
+        color: #8e44ad;
+        text-decoration: underline;
+        font-size: 11.5px;
+    }
+    .recommenders-box {
+        background-color: #f8f0fc;
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border-left: 4px solid #8e44ad;
+    }
+    @media (max-width: 480px) {
+        .book-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        details.book-card .card-cover img {
+            width: 50px;
+            height: 70px;
+        }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -128,6 +263,94 @@ def parse_book_info(item):
         body_part = content
     return title_part, body_part
 
+def first_link(raw_link):
+    if not raw_link:
+        return ""
+    for l in raw_link.split("\n"):
+        l = l.strip()
+        if l:
+            return l
+    return ""
+
+@st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
+def fetch_cover_image(link):
+    """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다."""
+    if not link:
+        return None
+    try:
+        resp = requests.get(link, headers=COVER_FETCH_HEADERS, timeout=4)
+        if resp.status_code != 200:
+            return None
+        page_text = resp.text
+        match = re.search(
+            r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+            page_text, re.IGNORECASE
+        )
+        if not match:
+            match = re.search(
+                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*property=["\']og:image["\']',
+                page_text, re.IGNORECASE
+            )
+        if match:
+            return match.group(1)
+    except Exception:
+        return None
+    return None
+
+def preload_covers(items):
+    """현재 페이지에 필요한 표지 이미지를 병렬로 미리 가져와 dict로 반환."""
+    links = list({first_link(item.get("링크", "")) for item in items if first_link(item.get("링크", ""))})
+    covers = {}
+    if not links:
+        return covers
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        future_map = {executor.submit(fetch_cover_image, l): l for l in links}
+        for future in concurrent.futures.as_completed(future_map):
+            l = future_map[future]
+            try:
+                covers[l] = future.result()
+            except Exception:
+                covers[l] = None
+    return covers
+
+def render_book_card(item, cover_url):
+    raw_sender = item.get("보낸사람", "익명")
+    display_name = html.escape(clean_name(raw_sender))
+    date_str = html.escape(item.get("작성일시", ""))
+    title_p, body_part = parse_book_info(item)
+    title_safe = html.escape(title_p)
+    body_safe = html.escape(body_part)
+    img_src = cover_url if cover_url else PLACEHOLDER_COVER
+
+    link = item.get("링크", "")
+    links_html = ""
+    if link:
+        for l in link.split("\n"):
+            l = l.strip()
+            if l:
+                l_safe = html.escape(l, quote=True)
+                links_html += (
+                    f'<a href="{l_safe}" target="_blank" rel="noopener noreferrer" '
+                    f'class="book-link">🔗 서점 링크 이동</a>'
+                )
+
+    return f"""
+    <details class="book-card">
+        <summary>
+            <div class="card-nickname">👤 {display_name}</div>
+            <div class="card-title">{title_safe}</div>
+            <div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>
+            <div class="card-preview">{body_safe}</div>
+            <div class="card-date">{date_str}</div>
+        </summary>
+        <div class="card-full">{body_safe}{links_html}</div>
+    </details>
+    """
+
+def render_book_grid(items, covers):
+    cards = "".join(render_book_card(item, covers.get(first_link(item.get("링크", "")))) for item in items)
+    st.markdown(f'<div class="book-grid">{cards}</div>', unsafe_allow_html=True)
+
 @st.cache_data(ttl=60)
 def load_data():
     client = get_gspread_client()
@@ -158,11 +381,11 @@ if uploaded_file is not None:
             try:
                 stringio = uploaded_file.getvalue().decode("utf-8")
                 lines = stringio.splitlines()
-                
+
                 # 북큐(#북큐) 메시지 파싱 로직
                 new_records = []
                 current_date = ""
-                
+
                 # 카카오톡 대화 형식 파싱 정규식 예시
                 # 형식: [이름] [오전 0:00] 내용 형태 혹은 날짜 변경선 감지
                 for line in lines:
@@ -171,7 +394,7 @@ if uploaded_file is not None:
                     if date_match:
                         current_date = date_match.group(1)
                         continue
-                    
+
                     # #북큐 키워드 포함 여부 확인
                     if "#북큐" in line:
                         # 대화 라인 파싱 시도 (예: [홍길동] [오후 8:30] #북큐 내용...)
@@ -180,24 +403,24 @@ if uploaded_file is not None:
                             sender = match.group(1)
                             time_str = match.group(2)
                             content = match.group(3)
-                            
+
                             # 링크 추출
                             urls = re.findall(r'(https?://[^\s]+)', content)
                             link_str = "\n".join(urls)
-                            
+
                             full_date = f"{current_date} {time_str}" if current_date else time_str
                             new_records.append([full_date, sender, content, link_str])
-                
+
                 if new_records:
                     client = get_gspread_client()
                     SPREADSHEET_ID = "1wKZnnf1MuI2K0efAYZhUsq3938rjzLjOZhgnNvbz5-A"
                     doc = client.open_by_key(SPREADSHEET_ID)
                     sheet = doc.worksheets()[0]
-                    
+
                     # 기존 시트에 데이터 추가 (중복 방지 또는 단순 추가)
                     for rec in new_records:
                         sheet.append_row(rec)
-                        
+
                     st.sidebar.success(f"총 {len(new_records)}개의 #북큐 메시지가 시트에 추가되었습니다!")
                     st.cache_data.clear()
                     st.rerun()
@@ -220,7 +443,7 @@ if "per_page" in query_params:
 
 try:
     items = load_data()
-    
+
     col_search, col_refresh = st.columns([5, 1])
     with col_search:
         search_query = st.text_input("🔍 #북큐 통합 검색", placeholder="책 제목, 작성자, 내용 입력", label_visibility="collapsed")
@@ -254,7 +477,7 @@ try:
         st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
     with col_per_page:
         current_per_page = st.session_state.items_per_page
-        options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 볼 목록 개수:</span>"
+        options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 표시할 카드 개수:</span>"
         for opt in [15, 20, 25, 30]:
             if current_per_page == opt:
                 options_html += f"<span class='page-option-selected'>{opt}</span>"
@@ -271,12 +494,12 @@ try:
         st.markdown(
             f"""
             <div style="padding: 12px; background-color: #f8f0fc; border-radius: 8px; margin: 15px 0; font-size: 15px; border-left: 4px solid #8e44ad;">
-                🔎 리스트에 없는 책입니다! 
+                🔎 리스트에 없는 책입니다!
                 <a href="{yes24_url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold; color: #8e44ad; text-decoration: underline;">
                     👉 YES24에서 '{search_query}' 검색하기
                 </a>
             </div>
-            """, 
+            """,
             unsafe_allow_html=True
         )
 
@@ -302,7 +525,7 @@ try:
 
             total_books = len(book_groups)
             total_pages = math.ceil(total_books / items_per_page)
-            
+
             if "prev_search" not in st.session_state:
                 st.session_state.prev_search = search_query
             if st.session_state.prev_search != search_query:
@@ -317,50 +540,33 @@ try:
             end_idx = start_idx + items_per_page
             page_book_groups = book_groups[start_idx:end_idx]
 
+            # 이 페이지에 필요한 표지 이미지를 한 번에 병렬로 준비
+            page_items_flat = [item for group in page_book_groups for item in group["items_chrono"]]
+            covers = preload_covers(page_items_flat)
+
             for group in page_book_groups:
                 title_p = group["title"]
                 items_chrono = group["items_chrono"]
-                
-                st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{title_p}</h3>", unsafe_allow_html=True)
-                
+
+                st.markdown(f"<h3 style='margin: 15px 0 10px 0; font-size: 1.25rem; color: #2c3e50;'>{html.escape(title_p)}</h3>", unsafe_allow_html=True)
+
                 if len(items_chrono) >= 2:
-                    recommenders_html = "<div style='background-color: #f8f0fc; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #8e44ad;'>"
+                    recommenders_html = "<div class='recommenders-box'>"
                     recommenders_html += "<div style='font-weight: bold; margin-bottom: 6px; color: #8e44ad;'>📖 추천한 모임원</div>"
                     for idx, item in enumerate(items_chrono, 1):
                         raw_sender = item.get("보낸사람", "익명")
                         display_name = clean_name(raw_sender)
                         date_str = item.get("작성일시", "")
-                        recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{display_name}</b> <span style='color: gray; font-size: 0.85em;'>({date_str})</span></div>"
+                        recommenders_html += f"<div style='margin-bottom: 3px;'>{idx}. <b>{html.escape(display_name)}</b> <span style='color: gray; font-size: 0.85em;'>({html.escape(date_str)})</span></div>"
                     recommenders_html += "</div>"
                     st.markdown(recommenders_html, unsafe_allow_html=True)
-                
-                for idx, item in enumerate(items_chrono, 1):
-                    raw_sender = item.get("보낸사람", "익명")
-                    display_name = clean_name(raw_sender)
-                    date_str = item.get("작성일시", "")
-                    
-                    prefix = f"{idx}. " if len(items_chrono) >= 2 else ""
-                    st.markdown(f"👤 **{prefix}{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
-                    
-                    _, body_part = parse_book_info(item)
-                    st.markdown(body_part)
-                    
-                    link = item.get("링크", "")
-                    if link:
-                        for l in link.split("\n"):
-                            l = l.strip()
-                            if l:
-                                st.markdown(
-                                    f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
-                                    unsafe_allow_html=True
-                                )
-                    st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
-                    
+
+                render_book_grid(items_chrono, covers)
                 st.markdown("---")
 
         else:
             total_pages = math.ceil(total_count / items_per_page)
-            
+
             if "prev_search" not in st.session_state:
                 st.session_state.prev_search = search_query
             if st.session_state.prev_search != search_query:
@@ -375,59 +581,36 @@ try:
             end_idx = start_idx + items_per_page
             page_items = filtered_items[start_idx:end_idx]
 
-            for item in page_items:
-                with st.container():
-                    raw_sender = item.get("보낸사람", "익명")
-                    display_name = clean_name(raw_sender)
-                    date_str = item.get("작성일시", "")
-                    
-                    st.markdown(f"👤 **{display_name}** &nbsp;·&nbsp; <span style='color: gray; font-size: 0.85em;'>{date_str}</span>", unsafe_allow_html=True)
-                    
-                    content = item.get("내용", "")
-                    if "]" in content:
-                        parts = content.split("]", 1)
-                        title_part = parts[0].strip() + "]"
-                        body_part = parts[1].strip()
-                        st.markdown(f"<h4 style='margin: 5px 0 10px 0; font-size: 1.15rem; color: #2c3e50;'>{title_part}</h4>", unsafe_allow_html=True)
-                        st.markdown(body_part)
-                    else:
-                        st.markdown(content)
-                        
-                    link = item.get("링크", "")
-                    if link:
-                        for l in link.split("\n"):
-                            l = l.strip()
-                            if l:
-                                st.markdown(
-                                    f"""🔗 <a href="{l}" target="_blank" rel="noopener noreferrer" style="color: #8e44ad; text-decoration: underline;">서점 링크 이동</a>""",
-                                    unsafe_allow_html=True
-                                )
-                                
-                    st.markdown("---")
+            covers = preload_covers(page_items)
+            render_book_grid(page_items, covers)
 
         if total_pages > 1:
             st.write("")
-            max_visible_buttons = min(total_pages + 2, 12)
-            cols = st.columns(max_visible_buttons)
-            
-            with cols[0]:
-                if st.button("<", disabled=(current_page == 1), key="prev_page_btn"):
+            col_prev, col_info, col_next = st.columns([1, 2, 1])
+            with col_prev:
+                if st.button("◀ 이전", disabled=(current_page == 1), key="prev_page_btn", use_container_width=True):
                     st.session_state.page_num -= 1
                     st.rerun()
-            
-            for p in range(1, total_pages + 1):
-                if p < max_visible_buttons - 1:
-                    with cols[p]:
-                        if p == current_page:
-                            st.markdown(f"<div style='display: inline-block; background-color: #e2e8f0; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; font-weight: bold; color: #000000; margin: 0 auto;'>{p}</div>", unsafe_allow_html=True)
-                        else:
-                            if st.button(str(p), key=f"page_num_{p}"):
-                                st.session_state.page_num = p
-                                st.rerun()
-            
-            with cols[-1]:
-                if st.button(">", disabled=(current_page == total_pages), key="next_page_btn"):
-                    st.session_state.page_num = current_page + 1
+            with col_info:
+                st.markdown(
+                    f"<div style='text-align:center; padding-top:10px; font-weight:bold; color:#2c3e50;'>{current_page} / {total_pages} 페이지</div>",
+                    unsafe_allow_html=True
+                )
+            with col_next:
+                if st.button("다음 ▶", disabled=(current_page == total_pages), key="next_page_btn", use_container_width=True):
+                    st.session_state.page_num += 1
+                    st.rerun()
+
+            if total_pages > 3:
+                selected_page = st.selectbox(
+                    "페이지 바로가기",
+                    options=list(range(1, total_pages + 1)),
+                    index=current_page - 1,
+                    key="page_jump_select",
+                    label_visibility="collapsed"
+                )
+                if selected_page != current_page:
+                    st.session_state.page_num = selected_page
                     st.rerun()
 
 except Exception as e:
