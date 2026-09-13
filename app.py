@@ -101,21 +101,6 @@ st.markdown("""
         border-width: 1px !important;
         border-radius: 6px !important;
     }
-    .st-key-home_btn_wrap_bottom {
-        display: flex;
-        justify-content: center;
-        margin-top: 18px;
-    }
-    .st-key-home_btn_wrap_bottom .stButton > button {
-        height: auto !important;
-        min-height: unset !important;
-        width: auto !important;
-        padding: 6px 18px !important;
-        font-size: 13px !important;
-        border-width: 1.5px !important;
-        border-radius: 8px !important;
-    }
-
     /* ===== 같은 책 제목으로 여러 명이 올렸을 때의 그룹 표시 ===== */
     .title-group-block {
         margin-bottom: 4px;
@@ -675,11 +660,6 @@ try:
                 f'<div class="page-nav-row">{first_btn}{prev_btn}{page_info}{next_btn}{last_btn}</div>',
                 unsafe_allow_html=True
             )
-
-    if search_query:
-        st.write("")
-        with st.container(key="home_btn_wrap_bottom"):
-            st.button("🏠 전체 목록으로", key="back_home_btn_bottom", on_click=clear_search)
 
 except Exception as e:
     st.error(f"구글 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
