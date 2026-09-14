@@ -9,6 +9,7 @@ import requests
 from google.oauth2.service_account import Credentials
 import math
 import re
+from datetime import datetime, timezone, timedelta
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
@@ -344,30 +345,17 @@ def clean_name(raw_name):
             name = name.split(delimiter)[0]
     return name.strip() if name.strip() else "익명"
 
-def format_update_time(raw):
-    """작성일시 문자열(예: 2026-09-13T07:48:55+00:00)을 'yyyy.mm.dd. HH:MM' 형태로 변환합니다."""
-    if not raw:
+def format_sheet_updated_time(iso_str):
+    """구글 시트 파일의 마지막 수정 시각(Drive API의 modifiedTime, UTC)을
+    한국 시간(KST) 기준 'yyyy.mm.dd. HH:MM' 형태로 변환합니다."""
+    if not iso_str:
         return ""
-    s = raw.strip()
-    if "T" in s:
-        date_part, time_part = s.split("T", 1)
-    elif " " in s:
-        date_part, time_part = s.split(" ", 1)
-    else:
-        date_part, time_part = s, ""
-    if "Z" in time_part:
-        time_part = time_part.split("Z", 1)[0]
-    if "+" in time_part:
-        time_part = time_part.split("+", 1)[0]
-    if time_part.count("-") > 0:
-        time_part = time_part.split("-", 1)[0]
-    date_fmt = date_part.replace("-", ".")
-    time_fmt = time_part[:5]
-    if len(date_fmt) != 10 or "." not in date_fmt:
-        return raw
-    if time_fmt:
-        return f"{date_fmt}. {time_fmt}"
-    return f"{date_fmt}."
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        kst = dt.astimezone(timezone(timedelta(hours=9)))
+        return kst.strftime("%Y.%m.%d. %H:%M")
+    except Exception:
+        return ""
 
 def parse_book_info(item):
     content = item.get("내용", "")
@@ -507,8 +495,23 @@ def load_data():
     doc = client.open_by_key(SPREADSHEET_ID)
     sheet = doc.worksheets()[0]
     data = sheet.get_all_values()
+
+    # 구글 시트 "파일" 자체의 마지막 수정 시각(Drive API modifiedTime)을 함께 가져옵니다.
+    # 이는 메시지 내용의 작성일시가 아니라, 시트가 실제로 마지막으로 갱신 처리된 시각입니다.
+    sheet_updated_raw = ""
+    try:
+        drive_resp = client.http_client.session.get(
+            f"https://www.googleapis.com/drive/v3/files/{SPREADSHEET_ID}",
+            params={"fields": "modifiedTime"},
+            timeout=5,
+        )
+        if drive_resp.status_code == 200:
+            sheet_updated_raw = drive_resp.json().get("modifiedTime", "")
+    except Exception:
+        sheet_updated_raw = ""
+
     if not data:
-        return []
+        return [], sheet_updated_raw
     headers = data[0]
     rows = data[1:]
     parsed_data = []
@@ -518,7 +521,7 @@ def load_data():
             item[h] = row[i] if i < len(row) else ""
         parsed_data.append(item)
     parsed_data.sort(key=lambda x: x.get("작성일시", ""), reverse=True)
-    return parsed_data
+    return parsed_data, sheet_updated_raw
 
 st.title("📚 와글 북큐 검색기")
 st.caption("모임원들이 공유한 추천 도서와 메시지를 모아모아!")
@@ -543,7 +546,7 @@ def clear_search():
     st.session_state.search_box = ""
 
 try:
-    items = load_data()
+    items, sheet_updated_raw = load_data()
 
     search_query = st.text_input(
         "🔍 #북큐 통합 검색",
@@ -572,7 +575,7 @@ try:
 
     st.write("")
 
-    latest_update_str = format_update_time(items[0].get("작성일시", "")) if items else ""
+    latest_update_str = format_sheet_updated_time(sheet_updated_raw)
 
     col_count_text, col_per_page = st.columns([2, 3])
     with col_count_text:
