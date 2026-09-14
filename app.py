@@ -344,6 +344,31 @@ def clean_name(raw_name):
             name = name.split(delimiter)[0]
     return name.strip() if name.strip() else "익명"
 
+def format_update_time(raw):
+    """작성일시 문자열(예: 2026-09-13T07:48:55+00:00)을 'yyyy.mm.dd. HH:MM' 형태로 변환합니다."""
+    if not raw:
+        return ""
+    s = raw.strip()
+    if "T" in s:
+        date_part, time_part = s.split("T", 1)
+    elif " " in s:
+        date_part, time_part = s.split(" ", 1)
+    else:
+        date_part, time_part = s, ""
+    if "Z" in time_part:
+        time_part = time_part.split("Z", 1)[0]
+    if "+" in time_part:
+        time_part = time_part.split("+", 1)[0]
+    if time_part.count("-") > 0:
+        time_part = time_part.split("-", 1)[0]
+    date_fmt = date_part.replace("-", ".")
+    time_fmt = time_part[:5]
+    if len(date_fmt) != 10 or "." not in date_fmt:
+        return raw
+    if time_fmt:
+        return f"{date_fmt}. {time_fmt}"
+    return f"{date_fmt}."
+
 def parse_book_info(item):
     content = item.get("내용", "")
     if "]" in content:
@@ -547,9 +572,15 @@ try:
 
     st.write("")
 
+    latest_update_str = format_update_time(items[0].get("작성일시", "")) if items else ""
+
     col_count_text, col_per_page = st.columns([2, 3])
     with col_count_text:
-        st.markdown(f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b></div>", unsafe_allow_html=True)
+        count_html = f"<div style='padding-top: 12px;'><b>총 {total_count}건의 #북큐 메시지</b>"
+        if latest_update_str:
+            count_html += f'<div style="font-size: 11px; color: #999999; margin-top: 2px;">최근 업데이트: {html.escape(latest_update_str)}</div>'
+        count_html += "</div>"
+        st.markdown(count_html, unsafe_allow_html=True)
     with col_per_page:
         current_per_page = st.session_state.items_per_page
         options_html = "<div style='text-align: right; padding-top: 4px;'><span style='font-size: 11px; color: #888888; margin-right: 4px;'>한 페이지에 표시할 카드 개수:</span>"
