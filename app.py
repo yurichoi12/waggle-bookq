@@ -360,13 +360,16 @@ def format_sheet_updated_time(iso_str):
 def parse_book_info(item):
     content = item.get("내용", "")
 
-    # '#북큐' 태그가 있으면, 태그 앞에 적힌 개인적인 소감/코멘트는 버리고
-    # 태그 뒤에 있는 실제 책 관련 내용만 제목/본문 파싱에 사용합니다.
-    # (예: "넹그 작가 안읽어봤지만... #북큐 [제목] 내용" -> "[제목] 내용"만 사용)
+    # '#북큐' 태그가 있으면서, 태그 앞부분에 대괄호 제목이 없는 경우에만
+    # (즉 "[제목] #북큐 내용"처럼 제목이 태그보다 앞에 오는 정상 형식이 아닌 경우)
+    # 태그 앞에 적힌 개인적인 소감/코멘트는 버리고 태그 뒤의 실제 내용만 사용합니다.
+    # (예: "넹그 작가 안읽어봤지만... #북큐 내용" -> "내용"만 사용)
     effective = content
     if "#북큐" in content:
-        after_tag = content.split("#북큐", 1)[1].strip()
-        if after_tag:
+        tag_idx = content.index("#북큐")
+        before_tag = content[:tag_idx]
+        after_tag = content[tag_idx + len("#북큐"):].strip()
+        if "]" not in before_tag and after_tag:
             effective = after_tag
 
     if "]" in effective:
