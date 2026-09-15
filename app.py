@@ -4,6 +4,7 @@ import itertools
 import urllib.parse
 import concurrent.futures
 import streamlit as st
+import streamlit.components.v1 as components
 import gspread
 import requests
 from google.oauth2.service_account import Credentials
@@ -556,53 +557,69 @@ def preload_covers(items):
 
 _card_id_counter = itertools.count()
 
-def build_client_title_fetch_html(title_id, link):
-    """예스24처럼 스트림릿 클라우드 서버 접속 자체가 막힌 사이트는 서버가 og:title을
-    못 가져오므로, 방문자의 브라우저가 CORS 프록시(allorigins.win)를 통해 직접
-    가져오게 합니다. 표지 이미지 때와 같은 이유로 서버 차단과 무관하게 동작합니다.
-    st.markdown은 <script> 태그를 실행하지 않기 때문에, 존재하지 않는 이미지 주소를
-    넣어 반드시 실패하는 숨겨진 <img>의 onerror 이벤트를 스크립트 실행 트리거로
-    이용하는 흔한 우회 방법을 사용합니다."""
-    fetch_call = (
-        "fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(" + json.dumps(link) + "))"
-    )
-    js_code = (
-        "this.remove();"
-        + fetch_call +
-        ".then(function(r){return r.json();})"
-        ".then(function(d){"
-        "var t=d&&d.contents;if(!t)return;"
-        "var m=t.match(/<meta[^>]+property=['\"]og:title['\"][^>]*content=['\"]([^'\"]+)['\"]/i);"
-        "if(!m){m=t.match(/<meta[^>]+content=['\"]([^'\"]+)['\"][^>]*property=['\"]og:title['\"]/i);}"
-        "if(m&&m[1]){"
-        "var el=document.getElementById(" + json.dumps(title_id) + ");"
-        "if(el){var ta=document.createElement('textarea');ta.innerHTML=m[1];el.textContent=ta.value;}"
-        "}"
-        "}).catch(function(){});"
-    )
-    js_safe = html.escape(js_code, quote=True)
-    return f'<img src="data:," alt="" style="display:none;width:0;height:0;" onerror="{js_safe}">'
+def run_client_side_fixups(pending_titles):
+    """1) 예스24처럼 스트림릿 클라우드 서버 접속 자체가 막혀 서버가 og:title을 못
+    가져온 카드는, 방문자의 브라우저가 CORS 프록시(allorigins.win)를 통해 직접
+    가져와 채워넣습니다.
+    2) 표지 이미지 로딩이 실패한 카드는 기본 아이콘으로 대체합니다.
+    주의: st.markdown이 렌더링한 HTML 안의 <script>나 onerror 같은 인라인 이벤트
+    속성은 스트림릿(DOMPurify)이 보안상 제거해버려 실행되지 않습니다. 대신
+    st.components.v1.html로 별도의 (동일 출처) iframe에서 스크립트를 실행하고,
+    window.parent.document로 실제 앱 화면의 DOM을 직접 수정합니다."""
+    # "</script>"가 링크에 포함되어 있어도 <script> 태그가 중간에 끊기지 않도록 이스케이프합니다.
+    pairs_json = json.dumps([{"id": tid, "link": link} for tid, link in pending_titles]).replace("</", "<\\/")
+    script = f"""
+<script>
+(function() {{
+  var doc = window.parent.document;
+  var pairs = {pairs_json};
+  pairs.forEach(function(p) {{
+    fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(p.link))
+      .then(function(r) {{ return r.json(); }})
+      .then(function(d) {{
+        var t = d && d.contents;
+        if (!t) return;
+        var m = t.match(/<meta[^>]+property=['"]og:title['"][^>]*content=['"]([^'"]+)['"]/i);
+        if (!m) {{ m = t.match(/<meta[^>]+content=['"]([^'"]+)['"][^>]*property=['"]og:title['"]/i); }}
+        if (m && m[1]) {{
+          var el = doc.getElementById(p.id);
+          if (el) {{
+            var ta = doc.createElement('textarea');
+            ta.innerHTML = m[1];
+            el.textContent = ta.value;
+          }}
+        }}
+      }})
+      .catch(function() {{}});
+  }});
+  var imgs = doc.querySelectorAll('.card-cover img[data-fallback]');
+  imgs.forEach(function(img) {{
+    img.addEventListener('error', function() {{
+      img.src = img.getAttribute('data-fallback');
+    }});
+  }});
+}})();
+</script>
+"""
+    components.html(script, height=0)
 
-def render_book_card(item, cover_url, preview_title=None):
+def render_book_card(item, cover_url, preview_title=None, title_pending=None):
     card_id = f"card-toggle-{next(_card_id_counter)}"
     title_id = f"card-title-{card_id}"
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
     title_p, body_part, is_real_title = parse_book_info(item)
-    client_fetch_html = ""
     if not is_real_title and preview_title:
         # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
         # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
         title_p = preview_title
-    elif not is_real_title and not preview_title:
+    elif not is_real_title and not preview_title and title_pending is not None:
         # 서버에서 직접 접속이 막힌 사이트(예: 예스24)는 서버가 제목을 못 가져오므로,
-        # 대신 카드가 화면에 뜬 뒤 방문자의 브라우저가 직접(CORS 프록시 경유) og:title을
-        # 가져와 채워넣도록 합니다. st.markdown은 <script> 태그를 실행하지 않기 때문에,
-        # 숨겨진 <img>의 onerror 이벤트를 스크립트 실행 트리거로 이용합니다.
+        # 카드가 화면에 뜬 뒤 방문자의 브라우저가 직접 가져오도록 대기 목록에 추가합니다.
         link_for_fetch = first_link(item.get("링크", ""))
         if link_for_fetch:
-            client_fetch_html = build_client_title_fetch_html(title_id, link_for_fetch)
+            title_pending.append((title_id, link_for_fetch))
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
@@ -627,9 +644,8 @@ def render_book_card(item, cover_url, preview_title=None):
         f'<input type="checkbox" class="card-toggle" id="{card_id}">'
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title" id="{title_id}">{title_safe}</div>'
-        f'{client_fetch_html}'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지" '
-        f'onerror="this.onerror=null;this.src=&quot;{placeholder_safe}&quot;;"/></div>'
+        f'data-fallback="{placeholder_safe}"/></div>'
         f'<div class="card-links">{links_html}</div>'
         f'<label for="{card_id}" class="card-body-wrap">'
         f'<div class="card-body-text">{body_safe}</div>'
@@ -640,19 +656,20 @@ def render_book_card(item, cover_url, preview_title=None):
         '</div>'
     )
 
-def render_book_grid(items, covers, titles=None):
+def render_book_grid(items, covers, titles=None, title_pending=None):
     titles = titles or {}
     cards = "".join(
         render_book_card(
             item,
             covers.get(first_link(item.get("링크", ""))),
-            titles.get(first_link(item.get("링크", "")))
+            titles.get(first_link(item.get("링크", ""))),
+            title_pending
         )
         for item in items
     )
     st.markdown(f'<div class="book-grid">{cards}</div>', unsafe_allow_html=True)
 
-def render_title_group(title, group_items, covers):
+def render_title_group(title, group_items, covers, title_pending=None):
     """제목이 대괄호로 정확히 일치하는 항목이 2건 이상일 때, 헤더 + 추천한 모임원
     박스를 보여준 뒤 해당 항목들을 카드 그리드로 표시합니다."""
     group_items_sorted = sorted(group_items, key=lambda x: x.get("작성일시", ""))
@@ -672,7 +689,7 @@ def render_title_group(title, group_items, covers):
         '</div>'
     )
     st.markdown(header_html, unsafe_allow_html=True)
-    render_book_grid(group_items_sorted, covers)
+    render_book_grid(group_items_sorted, covers, title_pending=title_pending)
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -820,6 +837,7 @@ try:
 
         covers = preload_covers(page_items)
         titles = preload_titles(page_items)
+        title_pending = []
 
         # 검색 중일 때, 대괄호로 표시된 정식 책 제목이 완전히 똑같은 항목이
         # 2건 이상이면 "추천한 모임원" 그룹으로 묶어서 보여줍니다.
@@ -839,7 +857,7 @@ try:
 
             def flush_buffer():
                 if buffer:
-                    render_book_grid(buffer, covers, titles)
+                    render_book_grid(buffer, covers, titles, title_pending)
                     buffer.clear()
 
             group_items_map = {}
@@ -855,12 +873,14 @@ try:
                         continue
                     rendered_groups.add(title_p)
                     flush_buffer()
-                    render_title_group(title_p, group_items_map[title_p], covers)
+                    render_title_group(title_p, group_items_map[title_p], covers, title_pending)
                 else:
                     buffer.append(item)
             flush_buffer()
         else:
-            render_book_grid(page_items, covers, titles)
+            render_book_grid(page_items, covers, titles, title_pending)
+
+        run_client_side_fixups(title_pending)
 
         if total_pages > 1:
             st.write("")
