@@ -425,31 +425,122 @@ def yes24_direct_cover(link):
     product_id = max(matches, key=len)
     return f"https://image.yes24.com/goods/{product_id}/xl"
 
+def _extract_og_image(page_text):
+    match = re.search(
+        r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+        page_text, re.IGNORECASE
+    )
+    if not match:
+        match = re.search(
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*property=["\']og:image["\']',
+            page_text, re.IGNORECASE
+        )
+    return match.group(1) if match else None
+
 @st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
 def fetch_cover_image(link):
-    """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다."""
+    """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다.
+    스트림릿 클라우드 서버에서 직접 접속이 막힌 사이트는 공개 프록시를 통해
+    한 번 더 시도합니다."""
     if not link:
         return None
     try:
         with requests.Session() as session:
             resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
-        if resp.status_code != 200:
-            return None
-        page_text = resp.text
+        if resp.status_code == 200:
+            image = _extract_og_image(resp.text)
+            if image:
+                return image
+    except Exception:
+        pass
+
+    proxy_urls = [
+        "https://api.allorigins.win/raw?url=" + urllib.parse.quote(link, safe=""),
+        "https://api.codetabs.com/v1/proxy?quest=" + urllib.parse.quote(link, safe=""),
+    ]
+    for proxy_url in proxy_urls:
+        try:
+            with requests.Session() as session:
+                resp = session.get(proxy_url, headers=COVER_FETCH_HEADERS, timeout=8)
+            if resp.status_code == 200:
+                image = _extract_og_image(resp.text)
+                if image:
+                    return image
+        except Exception:
+            continue
+    return None
+
+def _extract_og_title(page_text):
+    match = re.search(
+        r'<meta[^>]+property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']',
+        page_text, re.IGNORECASE
+    )
+    if not match:
         match = re.search(
-            r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*property=["\']og:title["\']',
             page_text, re.IGNORECASE
         )
-        if not match:
-            match = re.search(
-                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*property=["\']og:image["\']',
-                page_text, re.IGNORECASE
-            )
-        if match:
-            return match.group(1)
-    except Exception:
-        return None
+    if match:
+        title = html.unescape(match.group(1)).strip()
+        return title if title else None
     return None
+
+@st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
+def fetch_link_title(link):
+    """서점 링크 페이지의 og:title(실제 책 제목)을 가져옵니다.
+    메시지에 '[책 제목]' 형식이 없는 경우, 카톡에서 보이던 링크 미리보기처럼
+    링크 자체에서 실제 제목을 가져오기 위해 사용합니다.
+    스트림릿 클라우드 서버에서 직접 접속이 막힌 사이트(예: 예스24)는
+    공개 프록시를 통해 한 번 더 시도합니다 (실패해도 조용히 None 반환)."""
+    if not link:
+        return None
+    try:
+        with requests.Session() as session:
+            resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
+        if resp.status_code == 200:
+            title = _extract_og_title(resp.text)
+            if title:
+                return title
+    except Exception:
+        pass
+
+    # 서버에서 직접 접속이 막힌 사이트를 위한 예비 경로: 공개 프록시 경유
+    proxy_urls = [
+        "https://api.allorigins.win/raw?url=" + urllib.parse.quote(link, safe=""),
+        "https://api.codetabs.com/v1/proxy?quest=" + urllib.parse.quote(link, safe=""),
+    ]
+    for proxy_url in proxy_urls:
+        try:
+            with requests.Session() as session:
+                resp = session.get(proxy_url, headers=COVER_FETCH_HEADERS, timeout=8)
+            if resp.status_code == 200:
+                title = _extract_og_title(resp.text)
+                if title:
+                    return title
+        except Exception:
+            continue
+    return None
+
+def preload_titles(items):
+    """대괄호 제목이 없는 메시지 중 링크가 있는 항목만, 링크의 실제 책 제목을
+    병렬로 미리 가져와 dict로 반환합니다."""
+    links = list({
+        first_link(item.get("링크", ""))
+        for item in items
+        if first_link(item.get("링크", "")) and not parse_book_info(item)[2]
+    })
+    titles = {}
+    if not links:
+        return titles
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        future_map = {executor.submit(fetch_link_title, l): l for l in links}
+        for future in concurrent.futures.as_completed(future_map):
+            l = future_map[future]
+            try:
+                titles[l] = future.result()
+            except Exception:
+                titles[l] = None
+    return titles
 
 def preload_covers(items):
     """현재 페이지에 필요한 표지 이미지를 병렬로 미리 가져와 dict로 반환."""
@@ -481,12 +572,16 @@ def preload_covers(items):
 
 _card_id_counter = itertools.count()
 
-def render_book_card(item, cover_url):
+def render_book_card(item, cover_url, preview_title=None):
     card_id = f"card-toggle-{next(_card_id_counter)}"
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
-    title_p, body_part, _ = parse_book_info(item)
+    title_p, body_part, is_real_title = parse_book_info(item)
+    if not is_real_title and preview_title:
+        # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
+        # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
+        title_p = preview_title
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
@@ -523,8 +618,16 @@ def render_book_card(item, cover_url):
         '</div>'
     )
 
-def render_book_grid(items, covers):
-    cards = "".join(render_book_card(item, covers.get(first_link(item.get("링크", "")))) for item in items)
+def render_book_grid(items, covers, titles=None):
+    titles = titles or {}
+    cards = "".join(
+        render_book_card(
+            item,
+            covers.get(first_link(item.get("링크", ""))),
+            titles.get(first_link(item.get("링크", "")))
+        )
+        for item in items
+    )
     st.markdown(f'<div class="book-grid">{cards}</div>', unsafe_allow_html=True)
 
 def render_title_group(title, group_items, covers):
@@ -694,6 +797,7 @@ try:
         page_items = filtered_items[start_idx:end_idx]
 
         covers = preload_covers(page_items)
+        titles = preload_titles(page_items)
 
         # 검색 중일 때, 대괄호로 표시된 정식 책 제목이 완전히 똑같은 항목이
         # 2건 이상이면 "추천한 모임원" 그룹으로 묶어서 보여줍니다.
@@ -713,7 +817,7 @@ try:
 
             def flush_buffer():
                 if buffer:
-                    render_book_grid(buffer, covers)
+                    render_book_grid(buffer, covers, titles)
                     buffer.clear()
 
             group_items_map = {}
@@ -734,7 +838,7 @@ try:
                     buffer.append(item)
             flush_buffer()
         else:
-            render_book_grid(page_items, covers)
+            render_book_grid(page_items, covers, titles)
 
         if total_pages > 1:
             st.write("")
