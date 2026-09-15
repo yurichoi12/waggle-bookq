@@ -14,6 +14,14 @@ from datetime import datetime, timezone, timedelta
 
 st.set_page_config(page_title="와글 와글 독서모임 북큐 검색", page_icon="📚", layout="centered")
 
+# 구글 시트에서 IMPORTXML로 링크의 실제 책 제목(og:title)을 미리 계산해두는 열 이름.
+# 예스24처럼 스트림릿 클라우드 서버의 접속 자체가 막힌 사이트도, 이 수식은 구글
+# 자체 서버에서 실행되기 때문에 차단되지 않고 안정적으로 제목을 가져올 수 있습니다.
+LINK_TITLE_HEADER = "링크제목(자동)"
+# IMPORTXML/IMPORTHTML류 함수는 스프레드시트 하나당 동시 사용 개수에 제한이 있어,
+# 한 번 로드할 때마다 너무 많은 수식을 새로 채워 넣지 않도록 상한을 둡니다.
+LINK_TITLE_BACKFILL_LIMIT = 15
+
 # 책 표지가 없을 때 사용할 기본 아이콘 (작은 책 모양 SVG)
 PLACEHOLDER_COVER = "data:image/svg+xml;utf8," + urllib.parse.quote(
     """<svg xmlns='http://www.w3.org/2000/svg' width='60' height='84' viewBox='0 0 60 84'>
@@ -557,13 +565,8 @@ def preload_covers(items):
 
 _card_id_counter = itertools.count()
 
-def run_client_side_fixups(pending_titles):
+def run_client_side_fixups():
     """표지 이미지 로딩이 실패한 카드는 기본 아이콘으로 대체합니다.
-    (예스24처럼 서버 접속이 막힌 사이트의 제목을 방문자 브라우저가 공개 CORS
-    프록시로 대신 가져오는 방법도 시도했지만, allorigins/codetabs/corsproxy.io/
-    thingproxy 등 무료 공개 프록시들이 전부 다운되었거나 유료로 전환되어 있어
-    보류했습니다 - pending_titles는 현재 사용하지 않지만 추후 안정적인 프록시나
-    책 정보 API를 연결할 때를 위해 시그니처를 유지합니다.)
     주의: st.markdown이 렌더링한 HTML 안의 <script>나 onerror 같은 인라인 이벤트
     속성은 스트림릿(DOMPurify)이 보안상 제거해버려 실행되지 않습니다. 대신
     st.components.v1.html로 별도의 (동일 출처) iframe에서 스크립트를 실행하고,
@@ -583,23 +586,26 @@ def run_client_side_fixups(pending_titles):
 """
     components.html(script, height=0)
 
-def render_book_card(item, cover_url, preview_title=None, title_pending=None):
+def render_book_card(item, cover_url, preview_title=None):
     card_id = f"card-toggle-{next(_card_id_counter)}"
     title_id = f"card-title-{card_id}"
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
     title_p, body_part, is_real_title = parse_book_info(item)
-    if not is_real_title and preview_title:
-        # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
-        # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
-        title_p = preview_title
-    elif not is_real_title and not preview_title and title_pending is not None:
-        # 서버에서 직접 접속이 막힌 사이트(예: 예스24)는 서버가 제목을 못 가져오므로,
-        # 카드가 화면에 뜬 뒤 방문자의 브라우저가 직접 가져오도록 대기 목록에 추가합니다.
-        link_for_fetch = first_link(item.get("링크", ""))
-        if link_for_fetch:
-            title_pending.append((title_id, link_for_fetch))
+    if not is_real_title:
+        # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온 실제
+        # 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
+        # 1순위: 서버가 직접 fetch에 성공한 제목(preview_title).
+        # 2순위: 구글 시트에 미리 계산해 둔 링크 제목 열(LINK_TITLE_HEADER) -
+        #        예스24처럼 스트림릿 서버 접속이 막힌 사이트도, 구글 시트의
+        #        IMPORTXML은 구글 자체 서버에서 실행되어 차단되지 않으므로 이 값이
+        #        채워집니다 (load_data에서 자동으로 수식을 채워 넣습니다).
+        sheet_title = str(item.get(LINK_TITLE_HEADER, "") or "").strip()
+        if preview_title:
+            title_p = preview_title
+        elif sheet_title:
+            title_p = sheet_title
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
@@ -636,20 +642,19 @@ def render_book_card(item, cover_url, preview_title=None, title_pending=None):
         '</div>'
     )
 
-def render_book_grid(items, covers, titles=None, title_pending=None):
+def render_book_grid(items, covers, titles=None):
     titles = titles or {}
     cards = "".join(
         render_book_card(
             item,
             covers.get(first_link(item.get("링크", ""))),
-            titles.get(first_link(item.get("링크", ""))),
-            title_pending
+            titles.get(first_link(item.get("링크", "")))
         )
         for item in items
     )
     st.markdown(f'<div class="book-grid">{cards}</div>', unsafe_allow_html=True)
 
-def render_title_group(title, group_items, covers, title_pending=None):
+def render_title_group(title, group_items, covers):
     """제목이 대괄호로 정확히 일치하는 항목이 2건 이상일 때, 헤더 + 추천한 모임원
     박스를 보여준 뒤 해당 항목들을 카드 그리드로 표시합니다."""
     group_items_sorted = sorted(group_items, key=lambda x: x.get("작성일시", ""))
@@ -669,7 +674,63 @@ def render_title_group(title, group_items, covers, title_pending=None):
         '</div>'
     )
     st.markdown(header_html, unsafe_allow_html=True)
-    render_book_grid(group_items_sorted, covers, title_pending=title_pending)
+    render_book_grid(group_items_sorted, covers)
+
+def col_letter(n):
+    """1부터 시작하는 열 번호를 'A', 'B', ..., 'Z', 'AA' 같은 스프레드시트 열 문자로
+    변환합니다."""
+    letters = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
+
+def backfill_link_titles(sheet, headers, rows):
+    """대괄호 제목이 없는 메시지 중 링크가 있는 행에, 구글 시트 자체에서 IMPORTXML로
+    og:title을 계산하는 수식을 채워 넣습니다. 예스24처럼 스트림릿 클라우드 서버
+    접속이 막힌 사이트도 이 수식은 구글 자체 서버에서 실행되기 때문에 정상적으로
+    제목을 가져옵니다. 이미 값이 채워진 행은 건너뛰고, IMPORTXML류 함수의 시트당
+    동시 사용 개수 제한을 고려해 한 번에 LINK_TITLE_BACKFILL_LIMIT개까지만
+    새로 채웁니다."""
+    try:
+        if LINK_TITLE_HEADER in headers:
+            title_col_idx = headers.index(LINK_TITLE_HEADER) + 1  # 1-indexed
+        else:
+            title_col_idx = len(headers) + 1
+            sheet.update_cell(1, title_col_idx, LINK_TITLE_HEADER)
+            headers = headers + [LINK_TITLE_HEADER]
+
+        if "링크" not in headers:
+            return
+
+        updates = []
+        for row_offset, row in enumerate(rows):
+            if len(updates) >= LINK_TITLE_BACKFILL_LIMIT:
+                break
+            item = {h: (row[i] if i < len(row) else "") for i, h in enumerate(headers)}
+            _, _, is_real = parse_book_info(item)
+            if is_real:
+                continue
+            link = first_link(item.get("링크", ""))
+            if not link:
+                continue
+            existing = str(item.get(LINK_TITLE_HEADER, "") or "").strip()
+            if existing:
+                continue
+            sheet_row = row_offset + 2  # 1행은 헤더
+            cell_a1 = f"{col_letter(title_col_idx)}{sheet_row}"
+            escaped_link = link.replace('"', '""')
+            formula = (
+                f'=IFERROR(IMPORTXML("{escaped_link}", '
+                '"//meta[@property=\'og:title\']/@content"), "")'
+            )
+            updates.append({"range": cell_a1, "values": [[formula]]})
+
+        if updates:
+            sheet.batch_update(updates, value_input_option="USER_ENTERED")
+    except Exception:
+        # 백필 실패는 조용히 무시합니다 (제목 표시는 기존 스니펫 방식으로 정상 동작).
+        pass
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -697,6 +758,7 @@ def load_data():
         return [], sheet_updated_raw
     headers = data[0]
     rows = data[1:]
+    backfill_link_titles(sheet, headers, rows)
     parsed_data = []
     for row in rows:
         item = {}
@@ -817,7 +879,6 @@ try:
 
         covers = preload_covers(page_items)
         titles = preload_titles(page_items)
-        title_pending = []
 
         # 검색 중일 때, 대괄호로 표시된 정식 책 제목이 완전히 똑같은 항목이
         # 2건 이상이면 "추천한 모임원" 그룹으로 묶어서 보여줍니다.
@@ -837,7 +898,7 @@ try:
 
             def flush_buffer():
                 if buffer:
-                    render_book_grid(buffer, covers, titles, title_pending)
+                    render_book_grid(buffer, covers, titles)
                     buffer.clear()
 
             group_items_map = {}
@@ -853,14 +914,14 @@ try:
                         continue
                     rendered_groups.add(title_p)
                     flush_buffer()
-                    render_title_group(title_p, group_items_map[title_p], covers, title_pending)
+                    render_title_group(title_p, group_items_map[title_p], covers)
                 else:
                     buffer.append(item)
             flush_buffer()
         else:
-            render_book_grid(page_items, covers, titles, title_pending)
+            render_book_grid(page_items, covers, titles)
 
-        run_client_side_fixups(title_pending)
+        run_client_side_fixups()
 
         if total_pages > 1:
             st.write("")
