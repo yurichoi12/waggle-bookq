@@ -396,7 +396,13 @@ def parse_book_info(item):
     if "]" in effective:
         parts = effective.split("]", 1)
         title_part = parts[0].strip() + "]"
-        body_part = parts[1].strip()
+        remainder = parts[1]
+        # 제목(])과 실제 내용 사이에 "#북큐" 태그나 잡담이 껴 있는 경우
+        # (예: "[제목]\nㅇㅁㄴ\n#북큐\n실제내용") 태그 뒤의 내용만 사용합니다.
+        if "#북큐" in remainder:
+            body_part = remainder.split("#북큐", 1)[1].strip()
+        else:
+            body_part = remainder.strip()
         is_real_title = True
     else:
         # 대괄호 제목이 없는 메시지: 줄바꿈/중복 공백을 정리한 뒤
