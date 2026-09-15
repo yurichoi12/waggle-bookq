@@ -494,6 +494,7 @@ def fetch_link_title(link):
     공개 프록시를 통해 한 번 더 시도합니다 (실패해도 조용히 None 반환)."""
     if not link:
         return None
+    debug_errs = []
     try:
         with requests.Session() as session:
             resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
@@ -501,15 +502,18 @@ def fetch_link_title(link):
             title = _extract_og_title(resp.text)
             if title:
                 return title
-    except Exception:
-        pass
+            debug_errs.append(f"direct_ok_no_title_len{len(resp.text)}")
+        else:
+            debug_errs.append(f"direct_status_{resp.status_code}")
+    except Exception as e:
+        debug_errs.append(f"direct_{type(e).__name__}")
 
     # 서버에서 직접 접속이 막힌 사이트를 위한 예비 경로: 공개 프록시 경유
     proxy_urls = [
-        "https://api.allorigins.win/raw?url=" + urllib.parse.quote(link, safe=""),
-        "https://api.codetabs.com/v1/proxy?quest=" + urllib.parse.quote(link, safe=""),
+        ("allorigins", "https://api.allorigins.win/raw?url=" + urllib.parse.quote(link, safe="")),
+        ("codetabs", "https://api.codetabs.com/v1/proxy?quest=" + urllib.parse.quote(link, safe="")),
     ]
-    for proxy_url in proxy_urls:
+    for name, proxy_url in proxy_urls:
         try:
             with requests.Session() as session:
                 resp = session.get(proxy_url, headers=COVER_FETCH_HEADERS, timeout=8)
@@ -517,9 +521,12 @@ def fetch_link_title(link):
                 title = _extract_og_title(resp.text)
                 if title:
                     return title
-        except Exception:
-            continue
-    return None
+                debug_errs.append(f"{name}_ok_no_title_len{len(resp.text)}")
+            else:
+                debug_errs.append(f"{name}_status_{resp.status_code}")
+        except Exception as e:
+            debug_errs.append(f"{name}_{type(e).__name__}")
+    return "__ERR__" + "|".join(debug_errs)
 
 def preload_titles(items):
     """대괄호 제목이 없는 메시지 중 링크가 있는 항목만, 링크의 실제 책 제목을
@@ -578,11 +585,16 @@ def render_book_card(item, cover_url, preview_title=None):
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
     title_p, body_part, is_real_title = parse_book_info(item)
+    title_debug = ""
     if not is_real_title and preview_title:
-        # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
-        # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
-        title_p = preview_title
+        if str(preview_title).startswith("__ERR__"):
+            title_debug = html.escape(str(preview_title))
+        else:
+            # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
+            # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
+            title_p = preview_title
     title_safe = html.escape(title_p)
+    title_debug_html = f'<div style="font-size:8px;color:#e74c3c;word-break:break-all;">{title_debug}</div>' if title_debug else ""
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
     placeholder_safe = html.escape(PLACEHOLDER_COVER, quote=True)
@@ -606,6 +618,7 @@ def render_book_card(item, cover_url, preview_title=None):
         f'<input type="checkbox" class="card-toggle" id="{card_id}">'
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title">{title_safe}</div>'
+        f'{title_debug_html}'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지" '
         f'onerror="this.onerror=null;this.src=&quot;{placeholder_safe}&quot;;"/></div>'
         f'<div class="card-links">{links_html}</div>'
