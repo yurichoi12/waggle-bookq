@@ -558,47 +558,27 @@ def preload_covers(items):
 _card_id_counter = itertools.count()
 
 def run_client_side_fixups(pending_titles):
-    """1) 예스24처럼 스트림릿 클라우드 서버 접속 자체가 막혀 서버가 og:title을 못
-    가져온 카드는, 방문자의 브라우저가 CORS 프록시(allorigins.win)를 통해 직접
-    가져와 채워넣습니다.
-    2) 표지 이미지 로딩이 실패한 카드는 기본 아이콘으로 대체합니다.
+    """표지 이미지 로딩이 실패한 카드는 기본 아이콘으로 대체합니다.
+    (예스24처럼 서버 접속이 막힌 사이트의 제목을 방문자 브라우저가 공개 CORS
+    프록시로 대신 가져오는 방법도 시도했지만, allorigins/codetabs/corsproxy.io/
+    thingproxy 등 무료 공개 프록시들이 전부 다운되었거나 유료로 전환되어 있어
+    보류했습니다 - pending_titles는 현재 사용하지 않지만 추후 안정적인 프록시나
+    책 정보 API를 연결할 때를 위해 시그니처를 유지합니다.)
     주의: st.markdown이 렌더링한 HTML 안의 <script>나 onerror 같은 인라인 이벤트
     속성은 스트림릿(DOMPurify)이 보안상 제거해버려 실행되지 않습니다. 대신
     st.components.v1.html로 별도의 (동일 출처) iframe에서 스크립트를 실행하고,
     window.parent.document로 실제 앱 화면의 DOM을 직접 수정합니다."""
-    # "</script>"가 링크에 포함되어 있어도 <script> 태그가 중간에 끊기지 않도록 이스케이프합니다.
-    pairs_json = json.dumps([{"id": tid, "link": link} for tid, link in pending_titles]).replace("</", "<\\/")
-    script = f"""
+    script = """
 <script>
-(function() {{
+(function() {
   var doc = window.parent.document;
-  var pairs = {pairs_json};
-  pairs.forEach(function(p) {{
-    fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(p.link))
-      .then(function(r) {{ return r.json(); }})
-      .then(function(d) {{
-        var t = d && d.contents;
-        if (!t) return;
-        var m = t.match(/<meta[^>]+property=['"]og:title['"][^>]*content=['"]([^'"]+)['"]/i);
-        if (!m) {{ m = t.match(/<meta[^>]+content=['"]([^'"]+)['"][^>]*property=['"]og:title['"]/i); }}
-        if (m && m[1]) {{
-          var el = doc.getElementById(p.id);
-          if (el) {{
-            var ta = doc.createElement('textarea');
-            ta.innerHTML = m[1];
-            el.textContent = ta.value;
-          }}
-        }}
-      }})
-      .catch(function() {{}});
-  }});
   var imgs = doc.querySelectorAll('.card-cover img[data-fallback]');
-  imgs.forEach(function(img) {{
-    img.addEventListener('error', function() {{
+  imgs.forEach(function(img) {
+    img.addEventListener('error', function() {
       img.src = img.getAttribute('data-fallback');
-    }});
-  }});
-}})();
+    });
+  });
+})();
 </script>
 """
     components.html(script, height=0)
