@@ -365,7 +365,14 @@ def parse_book_info(item):
         body_part = parts[1].strip()
         is_real_title = True
     else:
-        title_part = content[:25].strip() + "..." if len(content) > 25 else content
+        # 대괄호 제목이 없는 메시지: '#북큐' 해시태그와 줄바꿈/중복 공백을 정리한 뒤
+        # 앞부분을 임시 제목으로 사용합니다 (실제 책 제목이 아닐 수 있습니다).
+        cleaned = content.replace("#북큐", " ")
+        cleaned = " ".join(cleaned.split())
+        if cleaned:
+            title_part = cleaned[:25].strip() + "..." if len(cleaned) > 25 else cleaned
+        else:
+            title_part = "(제목 없음)"
         body_part = content
         is_real_title = False
     return title_part, body_part, is_real_title
