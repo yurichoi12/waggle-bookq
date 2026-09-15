@@ -410,6 +410,21 @@ def first_link(raw_link):
             return l
     return ""
 
+def yes24_direct_cover(link):
+    """예스24는 스트림릿 클라우드 서버에서의 접속 자체가 막혀있어(og:image
+    스크래핑 불가) 표지를 못 가져옵니다. 대신 예스24 이미지 CDN 주소가
+    'https://image.yes24.com/goods/{상품ID}/xl' 형태로 예측 가능하다는 점을
+    이용해, 링크 속 상품ID로 이미지 주소를 직접 만들어 사용합니다.
+    이 경우 이미지 요청은 서버가 아니라 각 방문자의 브라우저가 직접 보내므로
+    서버-예스24 간 연결 차단과 무관하게 정상적으로 표지가 보입니다."""
+    if not link or "yes24.com" not in link.lower():
+        return None
+    matches = re.findall(r"\d{6,}", link)
+    if not matches:
+        return None
+    product_id = max(matches, key=len)
+    return f"https://image.yes24.com/goods/{product_id}/xl"
+
 @st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
 def fetch_cover_image(link):
     """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다."""
@@ -442,14 +457,26 @@ def preload_covers(items):
     covers = {}
     if not links:
         return covers
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        future_map = {executor.submit(fetch_cover_image, l): l for l in links}
-        for future in concurrent.futures.as_completed(future_map):
-            l = future_map[future]
-            try:
-                covers[l] = future.result()
-            except Exception:
-                covers[l] = None
+
+    # 예스24 링크는 서버에서 스크래핑을 시도하지 않고(=접속 자체가 막혀있어
+    # 어차피 실패), 이미지 CDN 주소를 바로 구성해서 사용합니다.
+    links_to_fetch = []
+    for l in links:
+        direct = yes24_direct_cover(l)
+        if direct:
+            covers[l] = direct
+        else:
+            links_to_fetch.append(l)
+
+    if links_to_fetch:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            future_map = {executor.submit(fetch_cover_image, l): l for l in links_to_fetch}
+            for future in concurrent.futures.as_completed(future_map):
+                l = future_map[future]
+                try:
+                    covers[l] = future.result()
+                except Exception:
+                    covers[l] = None
     return covers
 
 _card_id_counter = itertools.count()
@@ -463,6 +490,7 @@ def render_book_card(item, cover_url):
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
+    placeholder_safe = html.escape(PLACEHOLDER_COVER, quote=True)
 
     link = item.get("링크", "")
     links_html = ""
@@ -483,7 +511,8 @@ def render_book_card(item, cover_url):
         f'<input type="checkbox" class="card-toggle" id="{card_id}">'
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title">{title_safe}</div>'
-        f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>'
+        f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지" '
+        f'onerror="this.onerror=null;this.src=&quot;{placeholder_safe}&quot;;"/></div>'
         f'<div class="card-links">{links_html}</div>'
         f'<label for="{card_id}" class="card-body-wrap">'
         f'<div class="card-body-text">{body_safe}</div>'
