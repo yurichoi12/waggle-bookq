@@ -359,21 +359,30 @@ def format_sheet_updated_time(iso_str):
 
 def parse_book_info(item):
     content = item.get("내용", "")
-    if "]" in content:
-        parts = content.split("]", 1)
+
+    # '#북큐' 태그가 있으면, 태그 앞에 적힌 개인적인 소감/코멘트는 버리고
+    # 태그 뒤에 있는 실제 책 관련 내용만 제목/본문 파싱에 사용합니다.
+    # (예: "넹그 작가 안읽어봤지만... #북큐 [제목] 내용" -> "[제목] 내용"만 사용)
+    effective = content
+    if "#북큐" in content:
+        after_tag = content.split("#북큐", 1)[1].strip()
+        if after_tag:
+            effective = after_tag
+
+    if "]" in effective:
+        parts = effective.split("]", 1)
         title_part = parts[0].strip() + "]"
         body_part = parts[1].strip()
         is_real_title = True
     else:
-        # 대괄호 제목이 없는 메시지: '#북큐' 해시태그와 줄바꿈/중복 공백을 정리한 뒤
+        # 대괄호 제목이 없는 메시지: 줄바꿈/중복 공백을 정리한 뒤
         # 앞부분을 임시 제목으로 사용합니다 (실제 책 제목이 아닐 수 있습니다).
-        cleaned = content.replace("#북큐", " ")
-        cleaned = " ".join(cleaned.split())
+        cleaned = " ".join(effective.split())
         if cleaned:
             title_part = cleaned[:25].strip() + "..." if len(cleaned) > 25 else cleaned
         else:
             title_part = "(제목 없음)"
-        body_part = content
+        body_part = effective
         is_real_title = False
     return title_part, body_part, is_real_title
 
