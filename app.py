@@ -490,11 +490,10 @@ def fetch_link_title(link):
     """서점 링크 페이지의 og:title(실제 책 제목)을 가져옵니다.
     메시지에 '[책 제목]' 형식이 없는 경우, 카톡에서 보이던 링크 미리보기처럼
     링크 자체에서 실제 제목을 가져오기 위해 사용합니다.
-    스트림릿 클라우드 서버에서 직접 접속이 막힌 사이트(예: 예스24)는
-    공개 프록시를 통해 한 번 더 시도합니다 (실패해도 조용히 None 반환)."""
+    (스트림릿 클라우드 서버에서 접속 자체가 막힌 사이트, 예: 예스24는 여기서 실패하며,
+    그 경우 render_book_card에서 방문자의 브라우저가 직접 가져오도록 처리합니다.)"""
     if not link:
         return None
-    debug_errs = []
     try:
         with requests.Session() as session:
             resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
@@ -502,31 +501,9 @@ def fetch_link_title(link):
             title = _extract_og_title(resp.text)
             if title:
                 return title
-            debug_errs.append(f"direct_ok_no_title_len{len(resp.text)}")
-        else:
-            debug_errs.append(f"direct_status_{resp.status_code}")
-    except Exception as e:
-        debug_errs.append(f"direct_{type(e).__name__}")
-
-    # 서버에서 직접 접속이 막힌 사이트를 위한 예비 경로: 공개 프록시 경유
-    proxy_urls = [
-        ("allorigins", "https://api.allorigins.win/raw?url=" + urllib.parse.quote(link, safe="")),
-        ("codetabs", "https://api.codetabs.com/v1/proxy?quest=" + urllib.parse.quote(link, safe="")),
-    ]
-    for name, proxy_url in proxy_urls:
-        try:
-            with requests.Session() as session:
-                resp = session.get(proxy_url, headers=COVER_FETCH_HEADERS, timeout=8)
-            if resp.status_code == 200:
-                title = _extract_og_title(resp.text)
-                if title:
-                    return title
-                debug_errs.append(f"{name}_ok_no_title_len{len(resp.text)}")
-            else:
-                debug_errs.append(f"{name}_status_{resp.status_code}")
-        except Exception as e:
-            debug_errs.append(f"{name}_{type(e).__name__}")
-    return "__ERR__" + "|".join(debug_errs)
+    except Exception:
+        pass
+    return None
 
 def preload_titles(items):
     """대괄호 제목이 없는 메시지 중 링크가 있는 항목만, 링크의 실제 책 제목을
@@ -579,22 +556,54 @@ def preload_covers(items):
 
 _card_id_counter = itertools.count()
 
+def build_client_title_fetch_html(title_id, link):
+    """예스24처럼 스트림릿 클라우드 서버 접속 자체가 막힌 사이트는 서버가 og:title을
+    못 가져오므로, 방문자의 브라우저가 CORS 프록시(allorigins.win)를 통해 직접
+    가져오게 합니다. 표지 이미지 때와 같은 이유로 서버 차단과 무관하게 동작합니다.
+    st.markdown은 <script> 태그를 실행하지 않기 때문에, 존재하지 않는 이미지 주소를
+    넣어 반드시 실패하는 숨겨진 <img>의 onerror 이벤트를 스크립트 실행 트리거로
+    이용하는 흔한 우회 방법을 사용합니다."""
+    fetch_call = (
+        "fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(" + json.dumps(link) + "))"
+    )
+    js_code = (
+        "this.remove();"
+        + fetch_call +
+        ".then(function(r){return r.json();})"
+        ".then(function(d){"
+        "var t=d&&d.contents;if(!t)return;"
+        "var m=t.match(/<meta[^>]+property=['\"]og:title['\"][^>]*content=['\"]([^'\"]+)['\"]/i);"
+        "if(!m){m=t.match(/<meta[^>]+content=['\"]([^'\"]+)['\"][^>]*property=['\"]og:title['\"]/i);}"
+        "if(m&&m[1]){"
+        "var el=document.getElementById(" + json.dumps(title_id) + ");"
+        "if(el){var ta=document.createElement('textarea');ta.innerHTML=m[1];el.textContent=ta.value;}"
+        "}"
+        "}).catch(function(){});"
+    )
+    js_safe = html.escape(js_code, quote=True)
+    return f'<img src="data:," alt="" style="display:none;width:0;height:0;" onerror="{js_safe}">'
+
 def render_book_card(item, cover_url, preview_title=None):
     card_id = f"card-toggle-{next(_card_id_counter)}"
+    title_id = f"card-title-{card_id}"
     raw_sender = item.get("보낸사람", "익명")
     display_name = html.escape(clean_name(raw_sender))
     date_str = html.escape(item.get("작성일시", ""))
     title_p, body_part, is_real_title = parse_book_info(item)
-    title_debug = ""
+    client_fetch_html = ""
     if not is_real_title and preview_title:
-        if str(preview_title).startswith("__ERR__"):
-            title_debug = html.escape(str(preview_title))
-        else:
-            # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
-            # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
-            title_p = preview_title
+        # 메시지 자체에 '[책 제목]' 형식이 없으면, 링크 미리보기에서 가져온
+        # 실제 책 제목으로 대체합니다 (카톡에서 보이던 링크 미리보기와 동일한 역할).
+        title_p = preview_title
+    elif not is_real_title and not preview_title:
+        # 서버에서 직접 접속이 막힌 사이트(예: 예스24)는 서버가 제목을 못 가져오므로,
+        # 대신 카드가 화면에 뜬 뒤 방문자의 브라우저가 직접(CORS 프록시 경유) og:title을
+        # 가져와 채워넣도록 합니다. st.markdown은 <script> 태그를 실행하지 않기 때문에,
+        # 숨겨진 <img>의 onerror 이벤트를 스크립트 실행 트리거로 이용합니다.
+        link_for_fetch = first_link(item.get("링크", ""))
+        if link_for_fetch:
+            client_fetch_html = build_client_title_fetch_html(title_id, link_for_fetch)
     title_safe = html.escape(title_p)
-    title_debug_html = f'<div style="font-size:8px;color:#e74c3c;word-break:break-all;">{title_debug}</div>' if title_debug else ""
     body_safe = html.escape(body_part)
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
     placeholder_safe = html.escape(PLACEHOLDER_COVER, quote=True)
@@ -617,8 +626,8 @@ def render_book_card(item, cover_url, preview_title=None):
         '<div class="book-card">'
         f'<input type="checkbox" class="card-toggle" id="{card_id}">'
         f'<div class="card-nickname">👤 {display_name}</div>'
-        f'<div class="card-title">{title_safe}</div>'
-        f'{title_debug_html}'
+        f'<div class="card-title" id="{title_id}">{title_safe}</div>'
+        f'{client_fetch_html}'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지" '
         f'onerror="this.onerror=null;this.src=&quot;{placeholder_safe}&quot;;"/></div>'
         f'<div class="card-links">{links_html}</div>'
