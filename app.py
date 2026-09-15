@@ -412,14 +412,16 @@ def first_link(raw_link):
 
 @st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
 def fetch_cover_image(link):
-    """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다."""
+    """서점 링크 페이지의 og:image 메타태그에서 표지 이미지 URL을 가져옵니다.
+    실패 시 "__ERR__원인" 형태의 문자열을 반환합니다 (임시 디버그용,
+    호출부에서 __ERR__로 시작하면 표지 없음으로 처리하되 원인을 확인할 수 있음)."""
     if not link:
         return None
     try:
         with requests.Session() as session:
             resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
         if resp.status_code != 200:
-            return None
+            return f"__ERR__status_{resp.status_code}"
         page_text = resp.text
         match = re.search(
             r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
@@ -432,9 +434,9 @@ def fetch_cover_image(link):
             )
         if match:
             return match.group(1)
-    except Exception:
-        return None
-    return None
+        return f"__ERR__no_match_len{len(page_text)}"
+    except Exception as e:
+        return f"__ERR__{type(e).__name__}_{str(e)[:60]}"
 
 def preload_covers(items):
     """현재 페이지에 필요한 표지 이미지를 병렬로 미리 가져와 dict로 반환."""
@@ -462,7 +464,12 @@ def render_book_card(item, cover_url):
     title_p, body_part, _ = parse_book_info(item)
     title_safe = html.escape(title_p)
     body_safe = html.escape(body_part)
+    cover_err = ""
+    if cover_url and str(cover_url).startswith("__ERR__"):
+        cover_err = html.escape(str(cover_url))
+        cover_url = None
     img_src = cover_url if cover_url else PLACEHOLDER_COVER
+    cover_err_html = f'<div style="font-size:8px;color:#e74c3c;word-break:break-all;">{cover_err}</div>' if cover_err else ""
 
     link = item.get("링크", "")
     links_html = ""
@@ -484,6 +491,7 @@ def render_book_card(item, cover_url):
         f'<div class="card-nickname">👤 {display_name}</div>'
         f'<div class="card-title">{title_safe}</div>'
         f'<div class="card-cover"><img src="{img_src}" loading="lazy" alt="표지"/></div>'
+        f'{cover_err_html}'
         f'<div class="card-links">{links_html}</div>'
         f'<label for="{card_id}" class="card-body-wrap">'
         f'<div class="card-body-text">{body_safe}</div>'
