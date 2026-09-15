@@ -27,7 +27,19 @@ PLACEHOLDER_COVER = "data:image/svg+xml;utf8," + urllib.parse.quote(
 COVER_FETCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+    # 일부 서점 사이트가 리퍼러 없는 요청(=봇으로 의심)을 차단하는 경우가 있어
+    # 검색엔진에서 유입된 것처럼 보이도록 리퍼러를 함께 보냅니다.
+    "Referer": "https://www.google.com/",
 }
 
 # 전체 UI 스타일링 및 검색창/버튼/카드 레이아웃 스타일
@@ -404,7 +416,8 @@ def fetch_cover_image(link):
     if not link:
         return None
     try:
-        resp = requests.get(link, headers=COVER_FETCH_HEADERS, timeout=4)
+        with requests.Session() as session:
+            resp = session.get(link, headers=COVER_FETCH_HEADERS, timeout=6, allow_redirects=True)
         if resp.status_code != 200:
             return None
         page_text = resp.text
